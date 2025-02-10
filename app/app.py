@@ -6,7 +6,6 @@ from whoosh.index import create_in
 from whoosh.fields import Schema, TEXT, ID
 from whoosh.qparser import QueryParser
 from whoosh.analysis import StemmingAnalyzer, LowercaseFilter, StopFilter
-from whoosh.lang.porter import stemmer
 import nltk
 from nltk.corpus import wordnet
 from nltk.stem import WordNetLemmatizer
