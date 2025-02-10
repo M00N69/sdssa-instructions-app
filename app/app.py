@@ -5,6 +5,17 @@ import os
 from whoosh.index import create_in
 from whoosh.fields import Schema, TEXT, ID
 from whoosh.qparser import QueryParser
+from whoosh.analysis import StemmingAnalyzer, LowercaseFilter, StopFilter
+from whoosh.lang.porter import stemmer
+import nltk
+from nltk.corpus import wordnet
+from nltk.stem import WordNetLemmatizer
+from nltk.tokenize import word_tokenize
+
+# Télécharger les ressources nécessaires de NLTK
+nltk.download('punkt')
+nltk.download('wordnet')
+nltk.download('omw-1.4')
 
 # Fonction pour vérifier si la base de données existe
 def check_database():
@@ -22,9 +33,13 @@ def load_data(db_path):
     conn.close()
     return df
 
-# Fonction pour créer un index Whoosh
+# Fonction pour créer un index Whoosh avec des analyses avancées
 def create_whoosh_index(df):
-    schema = Schema(title=TEXT(stored=True), objet=TEXT(stored=True), resume=TEXT(stored=True), content=TEXT)
+    analyzer = StemmingAnalyzer() | LowercaseFilter() | StopFilter()
+    schema = Schema(title=TEXT(stored=True, analyzer=analyzer),
+                    objet=TEXT(stored=True, analyzer=analyzer),
+                    resume=TEXT(stored=True, analyzer=analyzer),
+                    content=TEXT(analyzer=analyzer))
     if not os.path.exists("indexdir"):
         os.mkdir("indexdir")
     ix = create_in("indexdir", schema)
@@ -33,6 +48,21 @@ def create_whoosh_index(df):
         writer.add_document(title=row['title'], objet=row['objet'], resume=row['resume'], content=f"{row['title']} {row['objet']} {row['resume']}")
     writer.commit()
     return ix
+
+# Fonction pour trouver des synonymes
+def get_synonyms(word):
+    synonyms = set()
+    for syn in wordnet.synsets(word):
+        for lemma in syn.lemmas():
+            synonyms.add(lemma.name().lower())
+    return synonyms
+
+# Fonction pour normaliser le texte
+def normalize_text(text):
+    lemmatizer = WordNetLemmatizer()
+    words = word_tokenize(text.lower())
+    normalized_words = [lemmatizer.lemmatize(word) for word in words]
+    return ' '.join(normalized_words)
 
 # Vérifier la base de données
 db_path = check_database()
@@ -74,8 +104,18 @@ if keyword:
 
 # Recherche avancée avec Whoosh
 if advanced_search:
+    # Normaliser la recherche avancée
+    normalized_search = normalize_text(advanced_search)
+    # Trouver des synonymes
+    synonyms = set()
+    for word in word_tokenize(normalized_search):
+        synonyms.update(get_synonyms(word))
+    synonyms.add(normalized_search)
+    
+    # Créer une requête qui inclut les synonymes
+    query_string = " OR ".join([f"content:{syn}" for syn in synonyms])
     with ix.searcher() as searcher:
-        query = QueryParser("content", ix.schema).parse(advanced_search)
+        query = QueryParser("content", ix.schema).parse(query_string)
         results = searcher.search(query)
         filtered_data = pd.DataFrame([{
             'year': data.loc[data['title'] == hit['title'], 'year'].values[0],
