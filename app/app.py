@@ -2,6 +2,9 @@ import streamlit as st
 import pandas as pd
 import sqlite3
 import os
+from whoosh.index import create_in
+from whoosh.fields import Schema, TEXT, ID
+from whoosh.qparser import QueryParser
 
 # Fonction pour vérifier si la base de données existe
 def check_database():
@@ -19,11 +22,26 @@ def load_data(db_path):
     conn.close()
     return df
 
+# Fonction pour créer un index Whoosh
+def create_whoosh_index(df):
+    schema = Schema(title=TEXT(stored=True), objet=TEXT(stored=True), resume=TEXT(stored=True), content=TEXT)
+    if not os.path.exists("indexdir"):
+        os.mkdir("indexdir")
+    ix = create_in("indexdir", schema)
+    writer = ix.writer()
+    for index, row in df.iterrows():
+        writer.add_document(title=row['title'], objet=row['objet'], resume=row['resume'], content=f"{row['title']} {row['objet']} {row['resume']}")
+    writer.commit()
+    return ix
+
 # Vérifier la base de données
 db_path = check_database()
 
 # Charger les données
 data = load_data(db_path)
+
+# Créer un index Whoosh
+ix = create_whoosh_index(data)
 
 # Titre de l'application
 st.title("Instructions Techniques SDSSA")
@@ -35,11 +53,27 @@ weeks = data['week'].unique()
 year = st.sidebar.selectbox("Année", years)
 week = st.sidebar.selectbox("Semaine", weeks)
 keyword = st.sidebar.text_input("Mot-clé")
+advanced_search = st.sidebar.text_input("Recherche avancée")
 
 # Filtrer les données
 filtered_data = data[(data['year'] == year) & (data['week'] == week)]
 if keyword:
-    filtered_data = filtered_data[filtered_data.apply(lambda row: keyword.lower() in row['title'].lower() or keyword.lower() in row['objet'].lower() or keyword.lower() in row['resume'].lower(), axis=1)]
+    filtered_data = data[data.apply(lambda row: keyword.lower() in row['title'].lower() or keyword.lower() in row['objet'].lower() or keyword.lower() in row['resume'].lower(), axis=1)]
+
+# Recherche avancée avec Whoosh
+if advanced_search:
+    with ix.searcher() as searcher:
+        query = QueryParser("content", ix.schema).parse(advanced_search)
+        results = searcher.search(query)
+        filtered_data = pd.DataFrame([{
+            'year': data.loc[data['title'] == hit['title'], 'year'].values[0],
+            'week': data.loc[data['title'] == hit['title'], 'week'].values[0],
+            'title': hit['title'],
+            'link': data.loc[data['title'] == hit['title'], 'link'].values[0],
+            'pdf_link': data.loc[data['title'] == hit['title'], 'pdf_link'].values[0],
+            'objet': hit['objet'],
+            'resume': hit['resume']
+        } for hit in results])
 
 # Afficher les résultats
 st.write(f"Résultats pour l'année {year}, semaine {week}:")
