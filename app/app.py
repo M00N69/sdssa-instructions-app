@@ -110,3 +110,4 @@ if selected_title:
     st.write(f"**Lien :** [{instruction_details['title']}]({instruction_details['link']})")
     st.write(f"**Télécharger le PDF :** [{instruction_details['title']}]({instruction_details['pdf_link']})")
 
+
