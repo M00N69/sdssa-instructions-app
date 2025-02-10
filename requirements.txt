@@ -2,5 +2,5 @@ streamlit
 pandas
 requests
 beautifulsoup4
-whoosh
-nltk
+whoosh==2.7.4
+nltk==3.8.1
