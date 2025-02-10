@@ -11,13 +11,8 @@ from nltk.corpus import wordnet
 from nltk.stem import WordNetLemmatizer
 from nltk.tokenize import word_tokenize
 
-# Télécharger les ressources nécessaires de NLTK
-try:
-    nltk.data.find('tokenizers/punkt')
-except LookupError:
-    nltk.download('punkt')
-nltk.download('wordnet')
-nltk.download('omw-1.4')
+# Exécuter le script d'initialisation NLTK
+import setup_nltk
 
 # Fonction pour vérifier si la base de données existe
 def check_database():
@@ -89,6 +84,9 @@ st.title("Instructions Techniques SDSSA")
 st.sidebar.header("Filtres")
 years = data['year'].unique()
 weeks = data['week'].unique()
+all_weeks_option = "Toutes les semaines"
+weeks = sorted(set(weeks))
+weeks.insert(0, all_weeks_option)  # Ajouter l'option "Toutes les semaines" au début
 year = st.sidebar.selectbox("Année", years)
 week = st.sidebar.selectbox("Semaine", weeks)
 keyword = st.sidebar.text_input("Mot-clé")
@@ -98,7 +96,10 @@ advanced_search = st.sidebar.text_input("Recherche avancée")
 filtered_data = data.copy()
 
 # Filtrer les données selon les filtres d'année et de semaine
-filtered_data = filtered_data[(filtered_data['year'] == year) & (filtered_data['week'] == week)]
+if week != all_weeks_option:
+    filtered_data = filtered_data[(filtered_data['year'] == year) & (filtered_data['week'] == week)]
+else:
+    filtered_data = filtered_data[filtered_data['year'] == year]
 
 # Filtrer les données selon le mot-clé
 if keyword:
@@ -136,9 +137,15 @@ if advanced_search:
 else:
     # Afficher les résultats filtrés par année et semaine
     if filtered_data.empty:
-        st.write(f"Aucun résultat trouvé pour l'année {year}, semaine {week}.")
+        if week == all_weeks_option:
+            st.write(f"Aucun résultat trouvé pour l'année {year}.")
+        else:
+            st.write(f"Aucun résultat trouvé pour l'année {year}, semaine {week}.")
     else:
-        st.write(f"Résultats pour l'année {year}, semaine {week}:")
+        if week == all_weeks_option:
+            st.write(f"Résultats pour l'année {year}:")
+        else:
+            st.write(f"Résultats pour l'année {year}, semaine {week}:")
         st.dataframe(filtered_data[['title', 'link', 'pdf_link', 'objet', 'resume']])
 
 # Téléchargement des données
