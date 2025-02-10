@@ -83,7 +83,7 @@ if missing_columns:
 ix = create_whoosh_index(data)
 
 # Titre de l'application
-st.title("Instructions Techniques SDSSA")
+st.title("Instructions Techniques DGAL / SDSSA")
 
 # Afficher les filtres
 st.sidebar.header("Filtres")
