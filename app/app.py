@@ -62,8 +62,13 @@ week = st.sidebar.selectbox("Semaine", weeks)
 keyword = st.sidebar.text_input("Mot-clé")
 advanced_search = st.sidebar.text_input("Recherche avancée")
 
-# Filtrer les données
-filtered_data = data[(data['year'] == year) & (data['week'] == week)]
+# Initialiser filtered_data avec toutes les données
+filtered_data = data.copy()
+
+# Filtrer les données selon les filtres d'année et de semaine
+filtered_data = filtered_data[(filtered_data['year'] == year) & (filtered_data['week'] == week)]
+
+# Filtrer les données selon le mot-clé
 if keyword:
     filtered_data = filtered_data[filtered_data.apply(lambda row: keyword.lower() in row['title'].lower() or keyword.lower() in row['objet'].lower() or keyword.lower() in row['resume'].lower(), axis=1)]
 
@@ -81,13 +86,18 @@ if advanced_search:
             'objet': hit['objet'],
             'resume': hit['resume']
         } for hit in results])
-
-# Afficher les résultats
-if filtered_data.empty:
-    st.write(f"Aucun résultat trouvé pour l'année {year}, semaine {week}.")
+    if filtered_data.empty:
+        st.write(f"Aucun résultat trouvé pour la recherche avancée : '{advanced_search}'.")
+    else:
+        st.write(f"Résultats pour la recherche avancée : '{advanced_search}':")
+        st.dataframe(filtered_data[['title', 'link', 'pdf_link', 'objet', 'resume']])
 else:
-    st.write(f"Résultats pour l'année {year}, semaine {week}:")
-    st.dataframe(filtered_data[['title', 'link', 'pdf_link', 'objet', 'resume']])
+    # Afficher les résultats filtrés par année et semaine
+    if filtered_data.empty:
+        st.write(f"Aucun résultat trouvé pour l'année {year}, semaine {week}.")
+    else:
+        st.write(f"Résultats pour l'année {year}, semaine {week}:")
+        st.dataframe(filtered_data[['title', 'link', 'pdf_link', 'objet', 'resume']])
 
 # Téléchargement des données
 st.sidebar.header("Télécharger les données")
