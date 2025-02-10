@@ -10,12 +10,14 @@ import nltk
 from nltk.corpus import wordnet
 from nltk.stem import WordNetLemmatizer
 from nltk.tokenize import word_tokenize
-import importlib.util
 
 # Exécuter le script d'initialisation NLTK
-spec = importlib.util.spec_from_file_location("setup_nltk", "setup_nltk.py")
-setup_nltk = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(setup_nltk)
+try:
+    nltk.data.find('tokenizers/punkt')
+except LookupError:
+    nltk.download('punkt')
+nltk.download('wordnet')
+nltk.download('omw-1.4')
 
 # Fonction pour vérifier si la base de données existe
 def check_database():
