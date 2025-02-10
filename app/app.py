@@ -10,9 +10,12 @@ import nltk
 from nltk.corpus import wordnet
 from nltk.stem import WordNetLemmatizer
 from nltk.tokenize import word_tokenize
+import importlib.util
 
 # Exécuter le script d'initialisation NLTK
-import setup_nltk
+spec = importlib.util.spec_from_file_location("setup_nltk", "setup_nltk.py")
+setup_nltk = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(setup_nltk)
 
 # Fonction pour vérifier si la base de données existe
 def check_database():
