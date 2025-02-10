@@ -40,6 +40,13 @@ db_path = check_database()
 # Charger les données
 data = load_data(db_path)
 
+# Vérifier les colonnes attendues
+required_columns = ['year', 'week', 'title', 'link', 'pdf_link', 'objet', 'resume']
+missing_columns = [col for col in required_columns if col not in data.columns]
+if missing_columns:
+    st.error(f"Les colonnes suivantes sont manquantes dans la base de données : {', '.join(missing_columns)}")
+    st.stop()
+
 # Créer un index Whoosh
 ix = create_whoosh_index(data)
 
@@ -58,7 +65,7 @@ advanced_search = st.sidebar.text_input("Recherche avancée")
 # Filtrer les données
 filtered_data = data[(data['year'] == year) & (data['week'] == week)]
 if keyword:
-    filtered_data = data[data.apply(lambda row: keyword.lower() in row['title'].lower() or keyword.lower() in row['objet'].lower() or keyword.lower() in row['resume'].lower(), axis=1)]
+    filtered_data = filtered_data[filtered_data.apply(lambda row: keyword.lower() in row['title'].lower() or keyword.lower() in row['objet'].lower() or keyword.lower() in row['resume'].lower(), axis=1)]
 
 # Recherche avancée avec Whoosh
 if advanced_search:
@@ -76,38 +83,48 @@ if advanced_search:
         } for hit in results])
 
 # Afficher les résultats
-st.write(f"Résultats pour l'année {year}, semaine {week}:")
-st.dataframe(filtered_data[['title', 'link', 'pdf_link', 'objet', 'resume']])
+if filtered_data.empty:
+    st.write(f"Aucun résultat trouvé pour l'année {year}, semaine {week}.")
+else:
+    st.write(f"Résultats pour l'année {year}, semaine {week}:")
+    st.dataframe(filtered_data[['title', 'link', 'pdf_link', 'objet', 'resume']])
 
 # Téléchargement des données
 st.sidebar.header("Télécharger les données")
 if st.sidebar.button("Télécharger le CSV"):
-    csv = filtered_data.to_csv(index=False).encode('utf-8')
-    st.sidebar.download_button(
-        label="Télécharger",
-        data=csv,
-        file_name="sdssa_instructions.csv",
-        mime="text/csv"
-    )
+    if filtered_data.empty:
+        st.sidebar.warning("Aucune donnée à télécharger.")
+    else:
+        csv = filtered_data.to_csv(index=False).encode('utf-8')
+        st.sidebar.download_button(
+            label="Télécharger",
+            data=csv,
+            file_name="sdssa_instructions.csv",
+            mime="text/csv"
+        )
 
 # Afficher les mises à jour récentes
 st.sidebar.header("Mises à jour récentes")
 if st.sidebar.button("Afficher les mises à jour récentes"):
-    recent_updates = data.sort_values(by='last_updated', ascending=False).head(10)
-    st.write("Dernières mises à jour :")
-    st.dataframe(recent_updates[['title', 'link', 'pdf_link', 'objet', 'resume', 'last_updated']])
+    if 'last_updated' not in data.columns:
+        st.error("La colonne 'last_updated' est manquante dans la base de données.")
+    else:
+        recent_updates = data.sort_values(by='last_updated', ascending=False).head(10)
+        st.write("Dernières mises à jour :")
+        st.dataframe(recent_updates[['title', 'link', 'pdf_link', 'objet', 'resume', 'last_updated']])
 
 # Afficher les détails d'une instruction
 st.sidebar.header("Détails d'une instruction")
-selected_title = st.sidebar.selectbox("Sélectionner une instruction", filtered_data['title'])
-if selected_title:
-    instruction_details = filtered_data[filtered_data['title'] == selected_title].iloc[0]
-    st.write(f"### Détails de l'instruction : {selected_title}")
-    st.write(f"**Année :** {instruction_details['year']}")
-    st.write(f"**Semaine :** {instruction_details['week']}")
-    st.write(f"**Objet :** {instruction_details['objet']}")
-    st.write(f"**Résumé :** {instruction_details['resume']}")
-    st.write(f"**Lien :** [{instruction_details['title']}]({instruction_details['link']})")
-    st.write(f"**Télécharger le PDF :** [{instruction_details['title']}]({instruction_details['pdf_link']})")
-
-
+if filtered_data.empty:
+    st.sidebar.warning("Aucune instruction à sélectionner.")
+else:
+    selected_title = st.sidebar.selectbox("Sélectionner une instruction", filtered_data['title'])
+    if selected_title:
+        instruction_details = filtered_data[filtered_data['title'] == selected_title].iloc[0]
+        st.write(f"### Détails de l'instruction : {selected_title}")
+        st.write(f"**Année :** {instruction_details['year']}")
+        st.write(f"**Semaine :** {instruction_details['week']}")
+        st.write(f"**Objet :** {instruction_details['objet']}")
+        st.write(f"**Résumé :** {instruction_details['resume']}")
+        st.write(f"**Lien :** [{instruction_details['title']}]({instruction_details['link']})")
+        st.write(f"**Télécharger le PDF :** [{instruction_details['title']}]({instruction_details['pdf_link']})")
