@@ -12,7 +12,10 @@ from nltk.stem import WordNetLemmatizer
 from nltk.tokenize import word_tokenize
 
 # Télécharger les ressources nécessaires de NLTK
-nltk.download('punkt')
+try:
+    nltk.data.find('tokenizers/punkt')
+except LookupError:
+    nltk.download('punkt')
 nltk.download('wordnet')
 nltk.download('omw-1.4')
 
