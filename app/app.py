@@ -155,9 +155,9 @@ else:
         st.dataframe(filtered_data[['objet', 'resume']])
     
         # Afficher les liens en dehors du tableau
-        for index, row in filtered_data.iterrows():
-            st.write(f"[Lire l'instruction]({row['link']})")
-            st.write(f"[Télécharger le PDF]({row['pdf_link']})")
+        #for index, row in filtered_data.iterrows():
+            # st.write(f"[Lire l'instruction]({row['link']})")
+            # st.write(f"[Télécharger le PDF]({row['pdf_link']})")
             
 # Téléchargement des données
 st.sidebar.header("Télécharger les données")
