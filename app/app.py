@@ -151,8 +151,8 @@ else:
             st.write(f"Résultats pour l'année {year}:")
         else:
             st.write(f"Résultats pour l'année {year}, semaine {week}:")
+        st.write("Double-cliquez sur une cellule pour lire le texte en entier.")
         st.dataframe(filtered_data[['title', 'link', 'pdf_link', 'objet', 'resume']])
-
 # Téléchargement des données
 st.sidebar.header("Télécharger les données")
 if st.sidebar.button("Télécharger le CSV"):
