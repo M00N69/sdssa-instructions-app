@@ -152,7 +152,13 @@ else:
         else:
             st.write(f"Résultats pour l'année {year}, semaine {week}:")
         st.write("Double-cliquez sur une cellule pour lire le texte en entier.")
-        st.dataframe(filtered_data[['title', 'link', 'pdf_link', 'objet', 'resume']])
+        st.dataframe(filtered_data[['objet', 'resume']])
+    
+        # Afficher les liens en dehors du tableau
+        for index, row in filtered_data.iterrows():
+            st.write(f"[Lire l'instruction]({row['link']})")
+            st.write(f"[Télécharger le PDF]({row['pdf_link']})")
+            
 # Téléchargement des données
 st.sidebar.header("Télécharger les données")
 if st.sidebar.button("Télécharger le CSV"):
