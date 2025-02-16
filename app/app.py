@@ -11,6 +11,9 @@ from nltk.corpus import wordnet
 from nltk.stem import WordNetLemmatizer
 from nltk.tokenize import word_tokenize
 
+# Configuration de la page
+st.set_page_config(layout="wide")
+
 # Exécuter le script d'initialisation NLTK
 try:
     nltk.data.find('tokenizers/punkt')
@@ -85,8 +88,32 @@ ix = create_whoosh_index(data)
 # Titre de l'application
 st.title("Instructions Techniques DGAL / SDSSA")
 
+# Instructions et explications
+with st.expander("Instructions et explications d'utilisation"):
+    st.markdown("""
+    <div style="background-color: #f9f9f9; padding: 10px; border-radius: 5px;">
+        <p>Bienvenue sur l'application SDSSA Instructions. Utilisez les filtres pour rechercher des instructions techniques par année, semaine, ou mots-clés. Vous pouvez également effectuer une recherche avancée pour des résultats plus précis.</p>
+        <p>Pour télécharger les données, utilisez le bouton de téléchargement dans la barre latérale.</p>
+    </div>
+    """, unsafe_allow_html=True)
+
 # Afficher les filtres
 st.sidebar.header("Filtres")
+
+# Logo Visipilot
+st.sidebar.markdown(
+    """
+    <div style="text-align: center; margin-top: 20px;">
+        <a href="https://www.visipilot.com" target="_blank">
+            <img src="https://github.com/M00N69/sdssa-instructions-app/blob/main/app/assets/logo.png?raw=true" alt="Visipilot Logo" width="150">
+        </a>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+# Filtres par année et semaine
+st.sidebar.subheader("Filtrer par année et semaine")
 years = data['year'].unique()
 weeks = data['week'].unique()
 all_weeks_option = "Toutes les semaines"
@@ -94,8 +121,15 @@ weeks = sorted(set(weeks))
 weeks.insert(0, all_weeks_option)  # Ajouter l'option "Toutes les semaines" au début
 year = st.sidebar.selectbox("Année", years)
 week = st.sidebar.selectbox("Semaine", weeks)
+
+# Filtre par mot-clé
+st.sidebar.subheader("Filtrer par mot-clé")
 keyword = st.sidebar.text_input("Mot-clé")
+
+# Recherche avancée
+st.sidebar.subheader("Recherche avancée")
 advanced_search = st.sidebar.text_input("Recherche avancée")
+st.sidebar.markdown("Utilisez la recherche avancée pour inclure des synonymes et obtenir des résultats plus précis.")
 
 # Initialiser filtered_data avec toutes les données
 filtered_data = data.copy()
@@ -119,7 +153,7 @@ if advanced_search:
     for word in word_tokenize(normalized_search):
         synonyms.update(get_synonyms(word))
     synonyms.add(normalized_search)
-    
+
     # Créer une requête qui inclut les synonymes
     query_string = " OR ".join([f"content:{syn}" for syn in synonyms])
     with ix.searcher() as searcher:
@@ -153,12 +187,23 @@ else:
             st.write(f"Résultats pour l'année {year}, semaine {week}:")
         st.write("Double-cliquez sur une cellule pour lire le texte en entier.")
         st.dataframe(filtered_data[['objet', 'resume']])
-    
-        # Afficher les liens en dehors du tableau
-        #for index, row in filtered_data.iterrows():
-            # st.write(f"[Lire l'instruction]({row['link']})")
-            # st.write(f"[Télécharger le PDF]({row['pdf_link']})")
-            
+
+# Détails d'une instruction
+st.sidebar.header("Détails d'une instruction")
+if filtered_data.empty:
+    st.sidebar.warning("Aucune instruction à sélectionner.")
+else:
+    selected_title = st.sidebar.selectbox("Sélectionner une instruction", filtered_data['title'])
+    if selected_title:
+        instruction_details = filtered_data[filtered_data['title'] == selected_title].iloc[0]
+        st.sidebar.markdown(f"### Détails de l'instruction : {selected_title}")
+        st.sidebar.markdown(f"**Année :** {instruction_details['year']}")
+        st.sidebar.markdown(f"**Semaine :** {instruction_details['week']}")
+        st.sidebar.markdown(f"**Objet :** {instruction_details['objet']}")
+        st.sidebar.markdown(f"**Résumé :** {instruction_details['resume']}")
+        st.sidebar.markdown(f"**Lien :** [{instruction_details['title']}]({instruction_details['link']})")
+        st.sidebar.markdown(f"**Télécharger le PDF :** [{instruction_details['title']}]({instruction_details['pdf_link']})")
+
 # Téléchargement des données
 st.sidebar.header("Télécharger les données")
 if st.sidebar.button("Télécharger le CSV"):
@@ -183,18 +228,3 @@ if st.sidebar.button("Afficher les mises à jour récentes"):
         st.write("Dernières mises à jour :")
         st.dataframe(recent_updates[['title', 'link', 'pdf_link', 'objet', 'resume', 'last_updated']])
 
-# Afficher les détails d'une instruction
-st.sidebar.header("Détails d'une instruction")
-if filtered_data.empty:
-    st.sidebar.warning("Aucune instruction à sélectionner.")
-else:
-    selected_title = st.sidebar.selectbox("Sélectionner une instruction", filtered_data['title'])
-    if selected_title:
-        instruction_details = filtered_data[filtered_data['title'] == selected_title].iloc[0]
-        st.write(f"### Détails de l'instruction : {selected_title}")
-        st.write(f"**Année :** {instruction_details['year']}")
-        st.write(f"**Semaine :** {instruction_details['week']}")
-        st.write(f"**Objet :** {instruction_details['objet']}")
-        st.write(f"**Résumé :** {instruction_details['resume']}")
-        st.write(f"**Lien :** [{instruction_details['title']}]({instruction_details['link']})")
-        st.write(f"**Télécharger le PDF :** [{instruction_details['title']}]({instruction_details['pdf_link']})")
