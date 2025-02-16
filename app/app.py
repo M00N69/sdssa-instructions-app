@@ -94,6 +94,7 @@ with st.expander("Instructions et explications d'utilisation"):
     <div style="background-color: #f9f9f9; padding: 10px; border-radius: 5px;">
         <p>Bienvenue sur l'application SDSSA Instructions. Utilisez les filtres pour rechercher des instructions techniques par année, semaine, ou mots-clés. Vous pouvez également effectuer une recherche avancée pour des résultats plus précis.</p>
         <p>Pour télécharger les données, utilisez le bouton de téléchargement dans la barre latérale.</p>
+        <p><strong>Note :</strong> La recherche avancée est prioritaire. Si vous utilisez la recherche avancée, les filtres par année, semaine et mot-clé ne seront pas appliqués.</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -131,18 +132,7 @@ st.sidebar.markdown(
 # Initialiser filtered_data avec toutes les données
 filtered_data = data.copy()
 
-# Filtrer les données selon les filtres d'année et de semaine
-if week != all_weeks_option:
-    filtered_data = filtered_data[(filtered_data['year'] == year) & (filtered_data['week'] == week)]
-else:
-    filtered_data = filtered_data[filtered_data['year'] == year]
-
-# Filtrer les données selon le mot-clé
-keyword = st.sidebar.text_input("Mot-clé")
-if keyword:
-    filtered_data = filtered_data[filtered_data.apply(lambda row: keyword.lower() in row['title'].lower() or keyword.lower() in row['objet'].lower() or keyword.lower() in row['resume'].lower(), axis=1)]
-
-# Recherche avancée avec Whoosh
+# Appliquer les filtres
 if advanced_search:
     # Normaliser la recherche avancée
     normalized_search = normalize_text(advanced_search)
@@ -166,25 +156,29 @@ if advanced_search:
             'objet': hit['objet'],
             'resume': hit['resume']
         } for hit in results])
-    if filtered_data.empty:
-        st.write(f"Aucun résultat trouvé pour la recherche avancée : '{advanced_search}'.")
-    else:
-        st.write(f"Résultats pour la recherche avancée : '{advanced_search}':")
-        st.dataframe(filtered_data[['title', 'link', 'pdf_link', 'objet', 'resume']])
 else:
-    # Afficher les résultats filtrés par année et semaine
-    if filtered_data.empty:
-        if week == all_weeks_option:
-            st.write(f"Aucun résultat trouvé pour l'année {year}.")
-        else:
-            st.write(f"Aucun résultat trouvé pour l'année {year}, semaine {week}.")
+    # Filtrer les données selon les filtres d'année et de semaine
+    if week != all_weeks_option:
+        filtered_data = filtered_data[(filtered_data['year'] == year) & (filtered_data['week'] == week)]
     else:
-        if week == all_weeks_option:
-            st.write(f"Résultats pour l'année {year}:")
-        else:
-            st.write(f"Résultats pour l'année {year}, semaine {week}:")
-        st.write("Double-cliquez sur une cellule pour lire le texte en entier.")
-        st.dataframe(filtered_data[['objet', 'resume']])
+        filtered_data = filtered_data[filtered_data['year'] == year]
+
+    # Filtrer les données selon le mot-clé
+    keyword = st.sidebar.text_input("Mot-clé")
+    if keyword:
+        filtered_data = filtered_data[filtered_data.apply(lambda row: keyword.lower() in row['title'].lower() or keyword.lower() in row['objet'].lower() or keyword.lower() in row['resume'].lower(), axis=1)]
+
+# Afficher les résultats filtrés
+if filtered_data.empty:
+    st.write("Aucun résultat trouvé avec les filtres actuels.")
+else:
+    st.write("Résultats filtrés :")
+    st.dataframe(filtered_data[['objet', 'resume']])
+
+    # Afficher les liens en dehors du tableau
+    for index, row in filtered_data.iterrows():
+        st.markdown(f"**Résumé :** {row['resume']}")
+        st.markdown(f"**[Lire l'instruction]({row['link']})** | **[Télécharger le PDF]({row['pdf_link']})**")
 
 # Détails de l'instruction sélectionnée
 if selected_title:
