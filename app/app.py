@@ -121,7 +121,7 @@ st.sidebar.markdown(
     """
     <div style="text-align: center; margin-top: 20px; width: 100%;">
         <a href="https://www.visipilot.com" target="_blank">
-            <img src="https://github.com/M00N69/sdssa-instructions-app/blob/main/app/assets/logo.png?raw=true" alt="Visipilot Logo" style="width: 100%; max-width: 150px;">
+            <img src="https://github.com/M00N69/sdssa-instructions-app/blob/main/app/assets/logo.png?raw=true" alt="Visipilot Logo" style="width: 100%;">
         </a>
     </div>
     """,
@@ -188,14 +188,16 @@ else:
 
 # Détails de l'instruction sélectionnée
 if selected_title:
-    instruction_details = filtered_data[filtered_data['title'] == selected_title].iloc[0]
-    st.markdown(f"### Détails de l'instruction : {selected_title}")
-    st.markdown(f"**Année :** {instruction_details['year']}")
-    st.markdown(f"**Semaine :** {instruction_details['week']}")
-    st.markdown(f"**Objet :** {instruction_details['objet']}")
-    st.markdown(f"**Résumé :** {instruction_details['resume']}")
-    st.markdown(f"**Lien :** [{instruction_details['title']}]({instruction_details['link']})")
-    st.markdown(f"**Télécharger le PDF :** [{instruction_details['title']}]({instruction_details['pdf_link']})")
+    instruction_details = filtered_data[filtered_data['title'] == selected_title]
+    if not instruction_details.empty:
+        instruction_details = instruction_details.iloc[0]
+        st.markdown(f"### Détails de l'instruction : {selected_title}")
+        st.markdown(f"**Année :** {instruction_details['year']}")
+        st.markdown(f"**Semaine :** {instruction_details['week']}")
+        st.markdown(f"**Objet :** {instruction_details['objet']}")
+        st.markdown(f"**Résumé :** {instruction_details['resume']}")
+        st.markdown(f"**Lien :** [{instruction_details['title']}]({instruction_details['link']})")
+        st.markdown(f"**Télécharger le PDF :** [{instruction_details['title']}]({instruction_details['pdf_link']})")
 
 # Téléchargement des données
 st.sidebar.header("Télécharger les données")
