@@ -42,9 +42,9 @@ def load_data(db_path):
 def create_whoosh_index(df):
     analyzer = StemmingAnalyzer() | LowercaseFilter() | StopFilter()
     schema = Schema(title=TEXT(stored=True, analyzer=analyzer),
-                    objet=TEXT(stored=True, analyzer=analyzer),
-                    resume=TEXT(stored=True, analyzer=analyzer),
-                    content=TEXT(analyzer=analyzer))
+                     objet=TEXT(stored=True, analyzer=analyzer),
+                     resume=TEXT(stored=True, analyzer=analyzer),
+                     content=TEXT(analyzer=analyzer))
     if not os.path.exists("indexdir"):
         os.mkdir("indexdir")
     ix = create_in("indexdir", schema)
@@ -158,11 +158,6 @@ else:
         filtered_data = filtered_data[(filtered_data['year'] == year) & (filtered_data['week'] == week)]
     else:
         filtered_data = filtered_data[filtered_data['year'] == year]
-
-    # Filtrer les données selon le mot-clé
-    keyword = st.sidebar.text_input("Mot-clé")
-    if keyword:
-        filtered_data = filtered_data[filtered_data.apply(lambda row: keyword.lower() in row['title'].lower() or keyword.lower() in row['objet'].lower() or keyword.lower() in row['resume'].lower(), axis=1)]
 
 # Afficher les résultats filtrés
 if filtered_data.empty:
