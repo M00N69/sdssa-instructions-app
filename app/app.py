@@ -97,39 +97,36 @@ with st.expander("Instructions et explications d'utilisation"):
     </div>
     """, unsafe_allow_html=True)
 
-# Afficher les filtres
-st.sidebar.header("Filtres")
-
-# Logo Visipilot
-st.sidebar.markdown(
-    """
-    <div style="text-align: center; margin-top: 20px;">
-        <a href="https://www.visipilot.com" target="_blank">
-            <img src="https://github.com/M00N69/sdssa-instructions-app/blob/main/app/assets/logo.png?raw=true" alt="Visipilot Logo" width="150">
-        </a>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
-
-# Filtres par année et semaine
-st.sidebar.subheader("Filtrer par année et semaine")
-years = data['year'].unique()
-weeks = data['week'].unique()
-all_weeks_option = "Toutes les semaines"
-weeks = sorted(set(weeks))
-weeks.insert(0, all_weeks_option)  # Ajouter l'option "Toutes les semaines" au début
-year = st.sidebar.selectbox("Année", years)
-week = st.sidebar.selectbox("Semaine", weeks)
-
-# Filtre par mot-clé
-st.sidebar.subheader("Filtrer par mot-clé")
-keyword = st.sidebar.text_input("Mot-clé")
+# Sélection d'une instruction
+st.sidebar.header("Détails d'une instruction")
+selected_title = st.sidebar.selectbox("Sélectionner une instruction", data['title'])
 
 # Recherche avancée
 st.sidebar.subheader("Recherche avancée")
 advanced_search = st.sidebar.text_input("Recherche avancée")
 st.sidebar.markdown("Utilisez la recherche avancée pour inclure des synonymes et obtenir des résultats plus précis.")
+
+# Filtres par année et semaine dans un expander
+with st.sidebar.expander("Filtrer par année et semaine"):
+    years = data['year'].unique()
+    weeks = data['week'].unique()
+    all_weeks_option = "Toutes les semaines"
+    weeks = sorted(set(weeks))
+    weeks.insert(0, all_weeks_option)  # Ajouter l'option "Toutes les semaines" au début
+    year = st.selectbox("Année", years)
+    week = st.selectbox("Semaine", weeks)
+
+# Logo Visipilot
+st.sidebar.markdown(
+    """
+    <div style="text-align: center; margin-top: 20px; width: 100%;">
+        <a href="https://www.visipilot.com" target="_blank">
+            <img src="https://github.com/M00N69/sdssa-instructions-app/blob/main/app/assets/logo.png?raw=true" alt="Visipilot Logo" style="width: 100%; max-width: 150px;">
+        </a>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
 
 # Initialiser filtered_data avec toutes les données
 filtered_data = data.copy()
@@ -141,6 +138,7 @@ else:
     filtered_data = filtered_data[filtered_data['year'] == year]
 
 # Filtrer les données selon le mot-clé
+keyword = st.sidebar.text_input("Mot-clé")
 if keyword:
     filtered_data = filtered_data[filtered_data.apply(lambda row: keyword.lower() in row['title'].lower() or keyword.lower() in row['objet'].lower() or keyword.lower() in row['resume'].lower(), axis=1)]
 
@@ -188,21 +186,16 @@ else:
         st.write("Double-cliquez sur une cellule pour lire le texte en entier.")
         st.dataframe(filtered_data[['objet', 'resume']])
 
-# Détails d'une instruction
-st.sidebar.header("Détails d'une instruction")
-if filtered_data.empty:
-    st.sidebar.warning("Aucune instruction à sélectionner.")
-else:
-    selected_title = st.sidebar.selectbox("Sélectionner une instruction", filtered_data['title'])
-    if selected_title:
-        instruction_details = filtered_data[filtered_data['title'] == selected_title].iloc[0]
-        st.sidebar.markdown(f"### Détails de l'instruction : {selected_title}")
-        st.sidebar.markdown(f"**Année :** {instruction_details['year']}")
-        st.sidebar.markdown(f"**Semaine :** {instruction_details['week']}")
-        st.sidebar.markdown(f"**Objet :** {instruction_details['objet']}")
-        st.sidebar.markdown(f"**Résumé :** {instruction_details['resume']}")
-        st.sidebar.markdown(f"**Lien :** [{instruction_details['title']}]({instruction_details['link']})")
-        st.sidebar.markdown(f"**Télécharger le PDF :** [{instruction_details['title']}]({instruction_details['pdf_link']})")
+# Détails de l'instruction sélectionnée
+if selected_title:
+    instruction_details = filtered_data[filtered_data['title'] == selected_title].iloc[0]
+    st.markdown(f"### Détails de l'instruction : {selected_title}")
+    st.markdown(f"**Année :** {instruction_details['year']}")
+    st.markdown(f"**Semaine :** {instruction_details['week']}")
+    st.markdown(f"**Objet :** {instruction_details['objet']}")
+    st.markdown(f"**Résumé :** {instruction_details['resume']}")
+    st.markdown(f"**Lien :** [{instruction_details['title']}]({instruction_details['link']})")
+    st.markdown(f"**Télécharger le PDF :** [{instruction_details['title']}]({instruction_details['pdf_link']})")
 
 # Téléchargement des données
 st.sidebar.header("Télécharger les données")
@@ -227,4 +220,3 @@ if st.sidebar.button("Afficher les mises à jour récentes"):
         recent_updates = data.sort_values(by='last_updated', ascending=False).head(10)
         st.write("Dernières mises à jour :")
         st.dataframe(recent_updates[['title', 'link', 'pdf_link', 'objet', 'resume', 'last_updated']])
-
