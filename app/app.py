@@ -98,10 +98,6 @@ with st.expander("Instructions et explications d'utilisation"):
     </div>
     """, unsafe_allow_html=True)
 
-# Sélection d'une instruction
-st.sidebar.header("Détails d'une instruction")
-selected_title = st.sidebar.selectbox("Sélectionner une instruction", data['title'])
-
 # Recherche avancée
 st.sidebar.subheader("Recherche avancée")
 advanced_search = st.sidebar.text_input("Recherche avancée")
@@ -175,16 +171,11 @@ else:
     st.write("Résultats filtrés :")
     st.dataframe(filtered_data[['objet', 'resume']])
 
-    # Afficher les liens en dehors du tableau
-    for index, row in filtered_data.iterrows():
-        st.markdown(f"**Résumé :** {row['resume']}")
-        st.markdown(f"**[Lire l'instruction]({row['link']})** | **[Télécharger le PDF]({row['pdf_link']})**")
-
-# Détails de l'instruction sélectionnée
-if selected_title:
-    instruction_details = filtered_data[filtered_data['title'] == selected_title]
-    if not instruction_details.empty:
-        instruction_details = instruction_details.iloc[0]
+    # Sélection d'une instruction pour afficher les détails
+    st.header("Détails d'une instruction")
+    selected_title = st.selectbox("Sélectionner une instruction", filtered_data['title'])
+    if selected_title:
+        instruction_details = filtered_data[filtered_data['title'] == selected_title].iloc[0]
         st.markdown(f"### Détails de l'instruction : {selected_title}")
         st.markdown(f"**Année :** {instruction_details['year']}")
         st.markdown(f"**Semaine :** {instruction_details['week']}")
