@@ -92,7 +92,7 @@ def add_instruction_to_db(year, week, title, link, pdf_link, objet, resume):
     try:
         cursor.execute("""
             INSERT INTO instructions (year, week, title, link, pdf_link, objet, resume, last_updated)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(title) DO UPDATE SET
             year=excluded.year,
             week=excluded.week,
@@ -257,10 +257,12 @@ if st.sidebar.button("Mettre à jour les données"):
         # Identifier les semaines à vérifier (depuis la dernière semaine en base jusqu'à la semaine actuelle)
         weeks_to_check = []
         for year in range(latest_year, current_year + 1):
-            start_week = latest_week + 1 if year == latest_year else 1
-            end_week = current_week if year == current_year else 52
+            start_week = latest_week + 1 if year == latest_year else 1  # Commencer après la dernière semaine enregistrée
+            end_week = current_week if year == current_year else 52  # Ne pas dépasser la semaine actuelle
             for week in range(start_week, end_week + 1):
                 weeks_to_check.append((year, week))
+
+        st.write(f"📅 Semaines à vérifier : {weeks_to_check}")
 
         # Récupérer et ajouter les nouvelles instructions des semaines manquantes
         new_instructions = []
@@ -271,6 +273,8 @@ if st.sidebar.button("Mettre à jour les données"):
                 pdf_link = link.replace("/detail", "/telechargement")
                 objet, resume = "OBJET : Exemple", "RESUME : Exemple"  # À extraire dynamiquement
                 new_instructions.append((year, week, instruction.text, link, pdf_link, objet, resume))
+
+        st.write(f"📄 {len(new_instructions)} nouvelles instructions trouvées.")
 
         # Ajouter les nouvelles instructions à la base de données
         for instruction in new_instructions:
@@ -299,7 +303,7 @@ if st.sidebar.button("Mettre à jour les données"):
                 cursor.close()
                 st.write("✅ Connexion fermée proprement.")
             except sqlite3.ProgrammingError:
-                st.write("⚠️ La connexion était déjà fermée.")
+                st.write("⚠️ Impossible de fermer le curseur, il est déjà fermé.")
         if conn:
             try:
                 conn.close()
