@@ -234,53 +234,63 @@ if st.sidebar.button("Télécharger le CSV"):
 
 # Bouton pour mettre à jour les données
 if st.sidebar.button("Mettre à jour les données"):
-    # Vérifier les semaines manquantes
-    conn = sqlite3.connect(db_path)
-    df_weeks = pd.read_sql_query("SELECT year, week FROM instructions;", conn)
-    conn.close()
+    try:
+        # Vérifier les semaines manquantes
+        conn = sqlite3.connect(db_path)
+        df_weeks = pd.read_sql_query("SELECT year, week FROM instructions;", conn)
+        conn.close()
 
-    if df_weeks.empty:
-        latest_year, latest_week = 2019, 1  # Si la base est vide, commencer à 2019 semaine 1
-    else:
-        latest_entry = df_weeks.sort_values(by=["year", "week"], ascending=False).iloc[0]
-        latest_year, latest_week = latest_entry["year"], latest_entry["week"]
+        if df_weeks.empty:
+            latest_year, latest_week = 2019, 1  # Si la base est vide, commencer à 2019 semaine 1
+        else:
+            latest_entry = df_weeks.sort_values(by=["year", "week"], ascending=False).iloc[0]
+            latest_year, latest_week = latest_entry["year"], latest_entry["week"]
 
-    current_year, current_week = datetime.now().isocalendar()[:2]
+        current_year, current_week = datetime.now().isocalendar()[:2]
 
-    # Identifier les semaines à vérifier (depuis la dernière semaine en base jusqu'à la semaine actuelle)
-    weeks_to_check = []
-    for year in range(latest_year, current_year + 1):
-        start_week = latest_week + 1 if year == latest_year else 1  # Commencer après la dernière semaine enregistrée
-        end_week = current_week if year == current_year else 52  # Ne pas dépasser la semaine actuelle
-        for week in range(start_week, end_week + 1):
-            weeks_to_check.append((year, week))
+        # Identifier les semaines à vérifier (depuis la dernière semaine en base jusqu'à la semaine actuelle)
+        weeks_to_check = []
+        for year in range(latest_year, current_year + 1):
+            start_week = latest_week + 1 if year == latest_year else 1  # Commencer après la dernière semaine enregistrée
+            end_week = current_week if year == current_year else 52  # Ne pas dépasser la semaine actuelle
+            for week in range(start_week, end_week + 1):
+                weeks_to_check.append((year, week))
 
-    # Récupérer et ajouter les nouvelles instructions des semaines manquantes
-    new_instructions = []
-    for year, week in weeks_to_check:
-        instructions = get_new_instructions(year, week)
-        for instruction in instructions:
-            link = f"https://info.agriculture.gouv.fr{instruction['href']}"
-            pdf_link = link.replace("/detail", "/telechargement")
-            objet, resume = "OBJET : Exemple", "RESUME : Exemple"  # À extraire dynamiquement
-            new_instructions.append((year, week, instruction.text, link, pdf_link, objet, resume))
+        # Récupérer et ajouter les nouvelles instructions des semaines manquantes
+        new_instructions = []
+        for year, week in weeks_to_check:
+            instructions = get_new_instructions(year, week)
+            for instruction in instructions:
+                link = f"https://info.agriculture.gouv.fr{instruction['href']}"
+                pdf_link = link.replace("/detail", "/telechargement")
+                objet, resume = "OBJET : Exemple", "RESUME : Exemple"  # À extraire dynamiquement
+                new_instructions.append((year, week, instruction.text, link, pdf_link, objet, resume))
 
-    # Ajouter les nouvelles instructions à la base de données
-    added_count = 0
-    for instruction in new_instructions:
-        year, week, title, link, pdf_link, objet, resume = instruction
-        cursor.execute("SELECT COUNT(*) FROM instructions WHERE title = ?", (title,))
-        if cursor.fetchone()[0] == 0:
-            add_instruction_to_db(year, week, title, link, pdf_link, objet, resume)
-            added_count += 1
+        # Ajouter les nouvelles instructions à la base de données
+        added_count = 0
+        for instruction in new_instructions:
+            year, week, title, link, pdf_link, objet, resume = instruction
+            cursor.execute("SELECT COUNT(*) FROM instructions WHERE title = ?", (title,))
+            if cursor.fetchone()[0] == 0:
+                add_instruction_to_db(year, week, title, link, pdf_link, objet, resume)
+                added_count += 1
 
-    # Recharger les données après la mise à jour
-    data = load_data(db_path)
-    filtered_data = data.copy()
-    if added_count > 0:
-        st.success(f"{added_count} nouvelles instructions ont été ajoutées !")
-    else:
-        st.info("Aucune nouvelle instruction trouvée.")
+        # Recharger les données après la mise à jour
+        data = load_data(db_path)
+        filtered_data = data.copy()
+        if added_count > 0:
+            st.success(f"{added_count} nouvelles instructions ont été ajoutées !")
+        else:
+            st.info("Aucune nouvelle instruction trouvée.")
+
+    except sqlite3.Error as e:
+        st.error(f"Erreur SQLite : {e}")
+    except Exception as e:
+        st.error(f"Erreur inattendue : {e}")
+    finally:
+        if 'conn' in locals():
+            conn.close()
+            st.write("✅ Connexion fermée.")
 
 # Afficher les mises à jour récentes
 st.sidebar.header("Mises à jour récentes")
