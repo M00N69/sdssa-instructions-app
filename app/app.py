@@ -234,9 +234,15 @@ if st.sidebar.button("Télécharger le CSV"):
 
 # Bouton pour mettre à jour les données
 if st.sidebar.button("Mettre à jour les données"):
+    conn = None
+    cursor = None
+    added_count = 0
     try:
         # Vérifier les semaines manquantes
         conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        st.write("✅ Connexion à la base de données réussie.")
+
         df_weeks = pd.read_sql_query("SELECT year, week FROM instructions;", conn)
         conn.close()
 
@@ -251,8 +257,8 @@ if st.sidebar.button("Mettre à jour les données"):
         # Identifier les semaines à vérifier (depuis la dernière semaine en base jusqu'à la semaine actuelle)
         weeks_to_check = []
         for year in range(latest_year, current_year + 1):
-            start_week = latest_week + 1 if year == latest_year else 1  # Commencer après la dernière semaine enregistrée
-            end_week = current_week if year == current_year else 52  # Ne pas dépasser la semaine actuelle
+            start_week = latest_week + 1 if year == latest_year else 1
+            end_week = current_week if year == current_year else 52
             for week in range(start_week, end_week + 1):
                 weeks_to_check.append((year, week))
 
@@ -267,7 +273,6 @@ if st.sidebar.button("Mettre à jour les données"):
                 new_instructions.append((year, week, instruction.text, link, pdf_link, objet, resume))
 
         # Ajouter les nouvelles instructions à la base de données
-        added_count = 0
         for instruction in new_instructions:
             year, week, title, link, pdf_link, objet, resume = instruction
             cursor.execute("SELECT COUNT(*) FROM instructions WHERE title = ?", (title,))
@@ -288,7 +293,9 @@ if st.sidebar.button("Mettre à jour les données"):
     except Exception as e:
         st.error(f"Erreur inattendue : {e}")
     finally:
-        if 'conn' in locals():
+        if cursor:
+            cursor.close()
+        if conn:
             conn.close()
             st.write("✅ Connexion fermée.")
 
