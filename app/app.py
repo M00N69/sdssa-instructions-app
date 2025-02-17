@@ -1,7 +1,3 @@
-# Knowledge Base
-
-## The content from [文件](Pasted_Text_1739816051730.txt):
-
 import streamlit as st
 import pandas as pd
 import sqlite3
@@ -52,15 +48,12 @@ def create_whoosh_index(df):
                     objet=TEXT(stored=True, analyzer=analyzer),
                     resume=TEXT(stored=True, analyzer=analyzer),
                     content=TEXT(analyzer=analyzer))
-    if not os.path.exists("indexdir"): 
+    if not os.path.exists("indexdir"):
         os.mkdir("indexdir")
     ix = create_in("indexdir", schema)
     writer = ix.writer()
     for index, row in df.iterrows():
-        writer.add_document(title=row['title'], 
-                            objet=row['objet'], 
-                            resume=row['resume'], 
-                            content=f"{row['title']} {row['objet']} {row['resume']}")
+        writer.add_document(title=row['title'], objet=row['objet'], resume=row['resume'], content=f"{row['title']} {row['objet']} {row['resume']}")
     writer.commit()
     return ix
 
@@ -80,7 +73,7 @@ def normalize_text(text):
     return ' '.join(normalized_words)
 
 # Fonction pour récupérer les nouvelles instructions des semaines manquantes
-def get_new_instructions(year, week): 
+def get_new_instructions(year, week):
     url = f"https://info.agriculture.gouv.fr/boagri/historique/annee-{year}/semaine-{week}"
     response = requests.get(url)
     if response.status_code == 200:
@@ -137,10 +130,11 @@ st.title("Instructions Techniques DGAL / SDSSA")
 # Instructions et explications
 with st.expander("Instructions et explications d'utilisation"):
     st.markdown("""
-       Bienvenue sur l'application SDSSA Instructions. Utilisez les filtres pour rechercher des instructions techniques par année, semaine, ou mots-clés. Vous pouvez également effectuer une recherche avancée pour des résultats plus précis.
-Pour télécharger les données, utilisez le bouton de téléchargement dans la barre latérale.
-Note : La recherche avancée est prioritaire. Si vous utilisez la recherche avancée, les filtres par année, semaine et mot-clé ne seront pas appliqués.
-
+    <div style="background-color: #f9f9f9; padding: 10px; border-radius: 5px;">
+        <p>Bienvenue sur l'application SDSSA Instructions. Utilisez les filtres pour rechercher des instructions techniques par année, semaine, ou mots-clés. Vous pouvez également effectuer une recherche avancée pour des résultats plus précis.</p>
+        <p>Pour télécharger les données, utilisez le bouton de téléchargement dans la barre latérale.</p>
+        <p><strong>Note :</strong> La recherche avancée est prioritaire. Si vous utilisez la recherche avancée, les filtres par année, semaine et mot-clé ne seront pas appliqués.</p>
+    </div>
     """, unsafe_allow_html=True)
 
 # Recherche avancée
@@ -161,9 +155,11 @@ with st.sidebar.expander("Filtrer par année et semaine"):
 # Logo Visipilot
 st.sidebar.markdown(
     """
-        
-https://github.com/M00N69/sdssa-instructions-app/blob/main/app/assets/logo.png?raw=true
-
+    <div style="text-align: center; margin-top: 20px; width: 100%;">
+        <a href="https://www.visipilot.com" target="_blank">
+            <img src="https://github.com/M00N69/sdssa-instructions-app/blob/main/app/assets/logo.png?raw=true" alt="Visipilot Logo" style="width: 100%;">
+        </a>
+    </div>
     """,
     unsafe_allow_html=True
 )
@@ -238,28 +234,52 @@ if st.sidebar.button("Télécharger le CSV"):
 
 # Bouton pour mettre à jour les données
 if st.sidebar.button("Mettre à jour les données"):
-    # Vérifier les semaines manquantes
-    existing_weeks = data[['year', 'week']].drop_duplicates()
-    missing_weeks = []
-    current_week = datetime.now().isocalendar()
-    for w in range(current_week[1], current_week[1] + 1):
-        if (current_week[0], w) not in existing_weeks.values:
-            missing_weeks.append((current_week[0], w))
+    conn = sqlite3.connect(db_path)
+    df_weeks = pd.read_sql_query("SELECT year, week FROM instructions;", conn)
+    conn.close()
+
+    if df_weeks.empty:
+        latest_year, latest_week = 2019, 1  # Si la base est vide, commencer à 2019 semaine 1
+    else:
+        latest_entry = df_weeks.sort_values(by=["year", "week"], ascending=False).iloc[0]
+        latest_year, latest_week = latest_entry["year"], latest_entry["week"]
+
+    current_year, current_week = datetime.now().isocalendar()[:2]
+
+    # Identifier les semaines à vérifier (depuis la dernière semaine en base jusqu'à la semaine actuelle)
+    weeks_to_check = []
+    for year in range(latest_year, current_year + 1):
+        start_week = latest_week + 1 if year == latest_year else 1  # Commencer après la dernière semaine enregistrée
+        end_week = current_week if year == current_year else 52  # Ne pas dépasser la semaine actuelle
+        for week in range(start_week, end_week + 1):
+            weeks_to_check.append((year, week))
 
     # Récupérer et ajouter les nouvelles instructions des semaines manquantes
-    for year, week in missing_weeks:
-        new_instructions = get_new_instructions(year, week)
-        for instruction in new_instructions:
+    new_instructions = []
+    for year, week in weeks_to_check:
+        instructions = get_new_instructions(year, week)
+        for instruction in instructions:
             link = f"https://info.agriculture.gouv.fr{instruction['href']}"
-            pdf_link = link.replace("/detail", "/telechargement")  # Exemple d'ajustement
-            objet = "OBJET : Exemple"   # À extraire dynamiquement
-            resume = "RESUME : Exemple"  # À extraire dynamiquement
-            add_instruction_to_db(year, week, instruction.text, link, pdf_link, objet, resume)
+            pdf_link = link.replace("/detail", "/telechargement")
+            objet, resume = "OBJET : Exemple", "RESUME : Exemple"  # À extraire dynamiquement
+            new_instructions.append((year, week, instruction.text, link, pdf_link, objet, resume))
+
+    # Ajouter les nouvelles instructions à la base de données
+    added_count = 0
+    for instruction in new_instructions:
+        year, week, title, link, pdf_link, objet, resume = instruction
+        cursor.execute("SELECT COUNT(*) FROM instructions WHERE title = ?", (title,))
+        if cursor.fetchone()[0] == 0:
+            add_instruction_to_db(year, week, title, link, pdf_link, objet, resume)
+            added_count += 1
 
     # Recharger les données après la mise à jour
     data = load_data(db_path)
     filtered_data = data.copy()
-    st.success("Les données ont été mises à jour avec succès.")
+    if added_count > 0:
+        st.success(f"{added_count} nouvelles instructions ont été ajoutées !")
+    else:
+        st.info("Aucune nouvelle instruction trouvée.")
 
 # Afficher les mises à jour récentes
 st.sidebar.header("Mises à jour récentes")
