@@ -72,7 +72,7 @@ def normalize_text(text):
     normalized_words = [lemmatizer.lemmatize(word) for word in words]
     return ' '.join(normalized_words)
 
-# Fonction pour récupérer les nouvelles instructions de la semaine précédente
+# Fonction pour récupérer les nouvelles instructions des semaines manquantes
 def get_new_instructions(year, week):
     url = f"https://info.agriculture.gouv.fr/boagri/historique/annee-{year}/semaine-{week}"
     response = requests.get(url)
@@ -234,20 +234,15 @@ if st.sidebar.button("Télécharger le CSV"):
 
 # Bouton pour mettre à jour les données
 if st.sidebar.button("Mettre à jour les données"):
-    # Récupérer les nouvelles instructions des semaines manquantes
-    last_week = datetime.now() - timedelta(days=7)
-    year = last_week.year
-    week = last_week.isocalendar()[1]
-
     # Vérifier les semaines manquantes
     existing_weeks = data[['year', 'week']].drop_duplicates()
     missing_weeks = []
     current_week = datetime.now().isocalendar()
-    for w in range(week, current_week[1] + 1):
-        if (year, w) not in existing_weeks.values:
-            missing_weeks.append((year, w))
+    for w in range(current_week[1], current_week[1] + 1):
+        if (current_week[0], w) not in existing_weeks.values:
+            missing_weeks.append((current_week[0], w))
 
-    # Récupérer et ajouter les nouvelles instructions pour les semaines manquantes
+    # Récupérer et ajouter les nouvelles instructions des semaines manquantes
     for year, week in missing_weeks:
         new_instructions = get_new_instructions(year, week)
         for instruction in new_instructions:
