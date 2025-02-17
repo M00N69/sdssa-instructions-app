@@ -257,8 +257,8 @@ if st.sidebar.button("Mettre à jour les données"):
         # Identifier les semaines à vérifier (depuis la dernière semaine en base jusqu'à la semaine actuelle)
         weeks_to_check = []
         for year in range(latest_year, current_year + 1):
-            start_week = latest_week + 1 if year == latest_year else 1  # Commencer après la dernière semaine enregistrée
-            end_week = current_week if year == current_year else 52  # Ne pas dépasser la semaine actuelle
+            start_week = latest_week + 1 if year == latest_year else 1
+            end_week = current_week if year == current_year else 52
             for week in range(start_week, end_week + 1):
                 weeks_to_check.append((year, week))
 
@@ -271,7 +271,7 @@ if st.sidebar.button("Mettre à jour les données"):
             for instruction in instructions:
                 link = f"https://info.agriculture.gouv.fr{instruction['href']}"
                 pdf_link = link.replace("/detail", "/telechargement")
-                objet, resume = "OBJET : Exemple", "RESUME : Exemple"  # À extraire dynamiquement
+                objet, resume = "OBJET : Exemple", "RESUME : Exemple"
                 new_instructions.append((year, week, instruction.text, link, pdf_link, objet, resume))
 
         st.write(f"📄 {len(new_instructions)} nouvelles instructions trouvées.")
@@ -320,3 +320,4 @@ if st.sidebar.button("Afficher les mises à jour récentes"):
         recent_updates = data.sort_values(by='last_updated', ascending=False).head(10)
         st.write("Dernières mises à jour :")
         st.dataframe(recent_updates[['title', 'link', 'pdf_link', 'objet', 'resume', 'last_updated']])
+
