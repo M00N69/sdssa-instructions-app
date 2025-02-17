@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import sqlite3
 import os
+import requests
+from bs4 import BeautifulSoup
 from whoosh.index import create_in
 from whoosh.fields import Schema, TEXT, ID
 from whoosh.qparser import QueryParser
@@ -10,6 +12,7 @@ import nltk
 from nltk.corpus import wordnet
 from nltk.stem import WordNetLemmatizer
 from nltk.tokenize import word_tokenize
+from datetime import datetime, timedelta
 
 # Configuration de la page
 st.set_page_config(layout="wide")
@@ -42,9 +45,9 @@ def load_data(db_path):
 def create_whoosh_index(df):
     analyzer = StemmingAnalyzer() | LowercaseFilter() | StopFilter()
     schema = Schema(title=TEXT(stored=True, analyzer=analyzer),
-                     objet=TEXT(stored=True, analyzer=analyzer),
-                     resume=TEXT(stored=True, analyzer=analyzer),
-                     content=TEXT(analyzer=analyzer))
+                    objet=TEXT(stored=True, analyzer=analyzer),
+                    resume=TEXT(stored=True, analyzer=analyzer),
+                    content=TEXT(analyzer=analyzer))
     if not os.path.exists("indexdir"):
         os.mkdir("indexdir")
     ix = create_in("indexdir", schema)
@@ -68,6 +71,42 @@ def normalize_text(text):
     words = word_tokenize(text.lower())
     normalized_words = [lemmatizer.lemmatize(word) for word in words]
     return ' '.join(normalized_words)
+
+# Fonction pour récupérer les nouvelles instructions de la semaine précédente
+def get_new_instructions(year, week):
+    url = f"https://info.agriculture.gouv.fr/boagri/historique/annee-{year}/semaine-{week}"
+    response = requests.get(url)
+    if response.status_code == 200:
+        soup = BeautifulSoup(response.content, 'html.parser')
+        instructions = soup.find_all('a', href=True)
+        sdssa_instructions = [a for a in instructions if 'SDSSA' in a.text]
+        return sdssa_instructions
+    else:
+        print(f"Failed to retrieve data for year {year} week {week}")
+        return []
+
+# Fonction pour ajouter une instruction à la base de données
+def add_instruction_to_db(year, week, title, link, pdf_link, objet, resume):
+    conn = sqlite3.connect('data/sdssa_instructions.db')
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            INSERT INTO instructions (year, week, title, link, pdf_link, objet, resume, last_updated)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(title) DO UPDATE SET
+            year=excluded.year,
+            week=excluded.week,
+            link=excluded.link,
+            pdf_link=excluded.pdf_link,
+            objet=excluded.objet,
+            resume=excluded.resume,
+            last_updated=excluded.last_updated;
+        """, (year, week, title, link, pdf_link, objet, resume, datetime.now()))
+        conn.commit()
+    except Exception as e:
+        print(f"Error inserting data: {e}")
+    finally:
+        conn.close()
 
 # Vérifier la base de données
 db_path = check_database()
@@ -202,3 +241,17 @@ if st.sidebar.button("Afficher les mises à jour récentes"):
         recent_updates = data.sort_values(by='last_updated', ascending=False).head(10)
         st.write("Dernières mises à jour :")
         st.dataframe(recent_updates[['title', 'link', 'pdf_link', 'objet', 'resume', 'last_updated']])
+
+# Mettre à jour les données
+last_week = datetime.now() - timedelta(days=7)
+year = last_week.year
+week = last_week.isocalendar()[1]
+
+new_instructions = get_new_instructions(year, week)
+for instruction in new_instructions:
+    link = f"https://info.agriculture.gouv.fr{instruction['href']}"
+    pdf_link = link.replace("/detail", "/telechargement")  # Exemple d'ajustement
+    objet = "OBJET : Exemple"  # À extraire dynamiquement
+    resume = "RESUME : Exemple"  # À extraire dynamiquement
+    add_instruction_to_db(year, week, instruction.text, link, pdf_link, objet, resume)
+
