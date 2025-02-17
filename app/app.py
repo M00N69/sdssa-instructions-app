@@ -240,17 +240,20 @@ if st.sidebar.button("Mettre à jour les données"):
     week = last_week.isocalendar()[1]
 
     new_instructions = get_new_instructions(year, week)
-    for instruction in new_instructions:
-        link = f"https://info.agriculture.gouv.fr{instruction['href']}"
-        pdf_link = link.replace("/detail", "/telechargement")  # Exemple d'ajustement
-        objet = "OBJET : Exemple"  # À extraire dynamiquement
-        resume = "RESUME : Exemple"  # À extraire dynamiquement
-        add_instruction_to_db(year, week, instruction.text, link, pdf_link, objet, resume)
+    if new_instructions:
+        for instruction in new_instructions:
+            link = f"https://info.agriculture.gouv.fr{instruction['href']}"
+            pdf_link = link.replace("/detail", "/telechargement")  # Exemple d'ajustement
+            objet = "OBJET : Exemple"  # À extraire dynamiquement
+            resume = "RESUME : Exemple"  # À extraire dynamiquement
+            add_instruction_to_db(year, week, instruction.text, link, pdf_link, objet, resume)
 
-    # Recharger les données après la mise à jour
-    data = load_data(db_path)
-    filtered_data = data.copy()
-    st.success("Les données ont été mises à jour avec succès.")
+        # Recharger les données après la mise à jour
+        data = load_data(db_path)
+        filtered_data = data.copy()
+        st.success("Les données ont été mises à jour avec succès.")
+    else:
+        st.warning("Aucune nouvelle instruction trouvée pour la semaine précédente.")
 
 # Afficher les mises à jour récentes
 st.sidebar.header("Mises à jour récentes")
