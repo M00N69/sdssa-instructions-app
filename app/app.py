@@ -276,7 +276,8 @@ if st.sidebar.button("Mettre à jour les données"):
         for instruction in new_instructions:
             year, week, title, link, pdf_link, objet, resume = instruction
             cursor.execute("SELECT COUNT(*) FROM instructions WHERE title = ?", (title,))
-            if cursor.fetchone()[0] == 0:
+            exists = cursor.fetchone()[0]
+            if exists == 0:
                 add_instruction_to_db(year, week, title, link, pdf_link, objet, resume)
                 added_count += 1
 
@@ -294,10 +295,17 @@ if st.sidebar.button("Mettre à jour les données"):
         st.error(f"Erreur inattendue : {e}")
     finally:
         if cursor:
-            cursor.close()
+            try:
+                cursor.close()
+                st.write("✅ Connexion fermée proprement.")
+            except sqlite3.ProgrammingError:
+                st.write("⚠️ La connexion était déjà fermée.")
         if conn:
-            conn.close()
-            st.write("✅ Connexion fermée.")
+            try:
+                conn.close()
+                st.write("✅ Connexion fermée proprement.")
+            except sqlite3.ProgrammingError:
+                st.write("⚠️ La connexion était déjà fermée.")
 
 # Afficher les mises à jour récentes
 st.sidebar.header("Mises à jour récentes")
