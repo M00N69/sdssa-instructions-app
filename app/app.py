@@ -264,7 +264,7 @@ if st.sidebar.button("Mettre à jour les données"):
 
         st.write(f"📅 Semaines à vérifier : {weeks_to_check}")
 
-        # Récupérer et ajouter les nouvelles instructions des semaines manquantes
+        # Récupérer les nouvelles instructions des semaines manquantes
         new_instructions = []
         for year, week in weeks_to_check:
             instructions = get_new_instructions(year, week)
@@ -280,9 +280,12 @@ if st.sidebar.button("Mettre à jour les données"):
         for instruction in new_instructions:
             year, week, title, link, pdf_link, objet, resume = instruction
             cursor.execute("SELECT COUNT(*) FROM instructions WHERE title = ?", (title,))
-            exists = cursor.fetchone()[0]
-            if exists == 0:
-                add_instruction_to_db(year, week, title, link, pdf_link, objet, resume)
+            exists = cursor.fetchone()[0] > 0
+            if not exists:
+                cursor.execute("""
+                    INSERT INTO instructions (year, week, title, link, pdf_link, objet, resume, last_updated)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (year, week, title, link, pdf_link, objet, resume, datetime.now()))
                 added_count += 1
 
         # Recharger les données après la mise à jour
@@ -320,4 +323,3 @@ if st.sidebar.button("Afficher les mises à jour récentes"):
         recent_updates = data.sort_values(by='last_updated', ascending=False).head(10)
         st.write("Dernières mises à jour :")
         st.dataframe(recent_updates[['title', 'link', 'pdf_link', 'objet', 'resume', 'last_updated']])
-
