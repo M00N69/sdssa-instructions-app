@@ -92,7 +92,7 @@ def add_instruction_to_db(year, week, title, link, pdf_link, objet, resume):
     try:
         cursor.execute("""
             INSERT INTO instructions (year, week, title, link, pdf_link, objet, resume, last_updated)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(title) DO UPDATE SET
             year=excluded.year,
             week=excluded.week,
@@ -280,12 +280,9 @@ if st.sidebar.button("Mettre à jour les données"):
         for instruction in new_instructions:
             year, week, title, link, pdf_link, objet, resume = instruction
             cursor.execute("SELECT COUNT(*) FROM instructions WHERE title = ?", (title,))
-            exists = cursor.fetchone()[0] > 0
-            if not exists:
-                cursor.execute("""
-                    INSERT INTO instructions (year, week, title, link, pdf_link, objet, resume, last_updated)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (year, week, title, link, pdf_link, objet, resume, datetime.now()))
+            exists = cursor.fetchone()[0]
+            if exists == 0:
+                add_instruction_to_db(year, week, title, link, pdf_link, objet, resume)
                 added_count += 1
 
         # Recharger les données après la mise à jour
