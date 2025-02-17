@@ -234,13 +234,22 @@ if st.sidebar.button("Télécharger le CSV"):
 
 # Bouton pour mettre à jour les données
 if st.sidebar.button("Mettre à jour les données"):
-    # Récupérer les nouvelles instructions de la semaine précédente
+    # Récupérer les nouvelles instructions des semaines manquantes
     last_week = datetime.now() - timedelta(days=7)
     year = last_week.year
     week = last_week.isocalendar()[1]
 
-    new_instructions = get_new_instructions(year, week)
-    if new_instructions:
+    # Vérifier les semaines manquantes
+    existing_weeks = data[['year', 'week']].drop_duplicates()
+    missing_weeks = []
+    current_week = datetime.now().isocalendar()
+    for w in range(week, current_week[1] + 1):
+        if (year, w) not in existing_weeks.values:
+            missing_weeks.append((year, w))
+
+    # Récupérer et ajouter les nouvelles instructions pour les semaines manquantes
+    for year, week in missing_weeks:
+        new_instructions = get_new_instructions(year, week)
         for instruction in new_instructions:
             link = f"https://info.agriculture.gouv.fr{instruction['href']}"
             pdf_link = link.replace("/detail", "/telechargement")  # Exemple d'ajustement
@@ -248,12 +257,10 @@ if st.sidebar.button("Mettre à jour les données"):
             resume = "RESUME : Exemple"  # À extraire dynamiquement
             add_instruction_to_db(year, week, instruction.text, link, pdf_link, objet, resume)
 
-        # Recharger les données après la mise à jour
-        data = load_data(db_path)
-        filtered_data = data.copy()
-        st.success("Les données ont été mises à jour avec succès.")
-    else:
-        st.warning("Aucune nouvelle instruction trouvée pour la semaine précédente.")
+    # Recharger les données après la mise à jour
+    data = load_data(db_path)
+    filtered_data = data.copy()
+    st.success("Les données ont été mises à jour avec succès.")
 
 # Afficher les mises à jour récentes
 st.sidebar.header("Mises à jour récentes")
