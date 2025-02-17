@@ -232,6 +232,26 @@ if st.sidebar.button("Télécharger le CSV"):
             mime="text/csv"
         )
 
+# Bouton pour mettre à jour les données
+if st.sidebar.button("Mettre à jour les données"):
+    # Récupérer les nouvelles instructions de la semaine précédente
+    last_week = datetime.now() - timedelta(days=7)
+    year = last_week.year
+    week = last_week.isocalendar()[1]
+
+    new_instructions = get_new_instructions(year, week)
+    for instruction in new_instructions:
+        link = f"https://info.agriculture.gouv.fr{instruction['href']}"
+        pdf_link = link.replace("/detail", "/telechargement")  # Exemple d'ajustement
+        objet = "OBJET : Exemple"  # À extraire dynamiquement
+        resume = "RESUME : Exemple"  # À extraire dynamiquement
+        add_instruction_to_db(year, week, instruction.text, link, pdf_link, objet, resume)
+
+    # Recharger les données après la mise à jour
+    data = load_data(db_path)
+    filtered_data = data.copy()
+    st.success("Les données ont été mises à jour avec succès.")
+
 # Afficher les mises à jour récentes
 st.sidebar.header("Mises à jour récentes")
 if st.sidebar.button("Afficher les mises à jour récentes"):
@@ -241,17 +261,3 @@ if st.sidebar.button("Afficher les mises à jour récentes"):
         recent_updates = data.sort_values(by='last_updated', ascending=False).head(10)
         st.write("Dernières mises à jour :")
         st.dataframe(recent_updates[['title', 'link', 'pdf_link', 'objet', 'resume', 'last_updated']])
-
-# Mettre à jour les données
-last_week = datetime.now() - timedelta(days=7)
-year = last_week.year
-week = last_week.isocalendar()[1]
-
-new_instructions = get_new_instructions(year, week)
-for instruction in new_instructions:
-    link = f"https://info.agriculture.gouv.fr{instruction['href']}"
-    pdf_link = link.replace("/detail", "/telechargement")  # Exemple d'ajustement
-    objet = "OBJET : Exemple"  # À extraire dynamiquement
-    resume = "RESUME : Exemple"  # À extraire dynamiquement
-    add_instruction_to_db(year, week, instruction.text, link, pdf_link, objet, resume)
-
