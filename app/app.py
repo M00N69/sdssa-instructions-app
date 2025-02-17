@@ -1,3 +1,7 @@
+# Knowledge Base
+
+## The content from [文件](Pasted_Text_1739816051730.txt):
+
 import streamlit as st
 import pandas as pd
 import sqlite3
@@ -48,12 +52,15 @@ def create_whoosh_index(df):
                     objet=TEXT(stored=True, analyzer=analyzer),
                     resume=TEXT(stored=True, analyzer=analyzer),
                     content=TEXT(analyzer=analyzer))
-    if not os.path.exists("indexdir"):
+    if not os.path.exists("indexdir"): 
         os.mkdir("indexdir")
     ix = create_in("indexdir", schema)
     writer = ix.writer()
     for index, row in df.iterrows():
-        writer.add_document(title=row['title'], objet=row['objet'], resume=row['resume'], content=f"{row['title']} {row['objet']} {row['resume']}")
+        writer.add_document(title=row['title'], 
+                            objet=row['objet'], 
+                            resume=row['resume'], 
+                            content=f"{row['title']} {row['objet']} {row['resume']}")
     writer.commit()
     return ix
 
@@ -73,7 +80,7 @@ def normalize_text(text):
     return ' '.join(normalized_words)
 
 # Fonction pour récupérer les nouvelles instructions des semaines manquantes
-def get_new_instructions(year, week):
+def get_new_instructions(year, week): 
     url = f"https://info.agriculture.gouv.fr/boagri/historique/annee-{year}/semaine-{week}"
     response = requests.get(url)
     if response.status_code == 200:
@@ -130,15 +137,136 @@ st.title("Instructions Techniques DGAL / SDSSA")
 # Instructions et explications
 with st.expander("Instructions et explications d'utilisation"):
     st.markdown("""
-    <div style="background-color: #f9f9f9; padding: 10px; border-radius: 5px;">
-        <p>Bienvenue sur l'application SDSSA Instructions. Utilisez les filtres pour rechercher des instructions techniques par année, semaine, ou mots-clés. Vous pouvez également effectuer une recherche avancée pour des résultats plus précis.</p>
-        <p>Pour télécharger les données, utilisez le bouton de téléchargement dans la barre latérale.</p>
-        <p><strong>Note :</strong> La recherche avancée est prioritaire. Si vous utilisez la recherche avancée, les filtres par année, semaine et mot-clé ne seront pas appliqués.</p>
-    </div>
+       Bienvenue sur l'application SDSSA Instructions. Utilisez les filtres pour rechercher des instructions techniques par année, semaine, ou mots-clés. Vous pouvez également effectuer une recherche avancée pour des résultats plus précis.
+Pour télécharger les données, utilisez le bouton de téléchargement dans la barre latérale.
+Note : La recherche avancée est prioritaire. Si vous utilisez la recherche avancée, les filtres par année, semaine et mot-clé ne seront pas appliqués.
+
     """, unsafe_allow_html=True)
 
-# ✅ **TOUT LE CODE CI-DESSOUS EST IDENTIQUE À CE QUE TU AS DEMANDÉ**
-# 🔽🔽🔽🔽🔽🔽🔽🔽🔽🔽🔽🔽🔽🔽🔽🔽🔽🔽🔽🔽🔽🔽🔽🔽🔽🔽🔽🔽🔽🔽🔽🔽🔽🔽🔽🔽🔽🔽🔽
+# Recherche avancée
+st.sidebar.subheader("Recherche avancée")
+advanced_search = st.sidebar.text_input("Recherche avancée")
+st.sidebar.markdown("Utilisez la recherche avancée pour inclure des synonymes et obtenir des résultats plus précis.")
 
-# (Le code continue sans modification)
+# Filtres par année et semaine dans un expander
+with st.sidebar.expander("Filtrer par année et semaine"):
+    years = data['year'].unique()
+    weeks = data['week'].unique()
+    all_weeks_option = "Toutes les semaines"
+    weeks = sorted(set(weeks))
+    weeks.insert(0, all_weeks_option)  # Ajouter l'option "Toutes les semaines" au début
+    year = st.selectbox("Année", years)
+    week = st.selectbox("Semaine", weeks)
 
+# Logo Visipilot
+st.sidebar.markdown(
+    """
+        
+https://github.com/M00N69/sdssa-instructions-app/blob/main/app/assets/logo.png?raw=true
+
+    """,
+    unsafe_allow_html=True
+)
+
+# Initialiser filtered_data avec toutes les données
+filtered_data = data.copy()
+
+# Appliquer les filtres
+if advanced_search:
+    # Normaliser la recherche avancée
+    normalized_search = normalize_text(advanced_search)
+    # Trouver des synonymes
+    synonyms = set()
+    for word in word_tokenize(normalized_search):
+        synonyms.update(get_synonyms(word))
+    synonyms.add(normalized_search)
+
+    # Créer une requête qui inclut les synonymes
+    query_string = " OR ".join([f"content:{syn}" for syn in synonyms])
+    with ix.searcher() as searcher:
+        query = QueryParser("content", ix.schema).parse(query_string)
+        results = searcher.search(query)
+        filtered_data = pd.DataFrame([{
+            'year': data.loc[data['title'] == hit['title'], 'year'].values[0],
+            'week': data.loc[data['title'] == hit['title'], 'week'].values[0],
+            'title': hit['title'],
+            'link': data.loc[data['title'] == hit['title'], 'link'].values[0],
+            'pdf_link': data.loc[data['title'] == hit['title'], 'pdf_link'].values[0],
+            'objet': hit['objet'],
+            'resume': hit['resume']
+        } for hit in results])
+else:
+    # Filtrer les données selon les filtres d'année et de semaine
+    if week != all_weeks_option:
+        filtered_data = filtered_data[(filtered_data['year'] == year) & (filtered_data['week'] == week)]
+    else:
+        filtered_data = filtered_data[filtered_data['year'] == year]
+
+# Afficher les résultats filtrés
+if filtered_data.empty:
+    st.write("Aucun résultat trouvé avec les filtres actuels.")
+else:
+    st.write("Résultats filtrés :")
+    st.dataframe(filtered_data[['objet', 'resume']])
+
+    # Sélection d'une instruction pour afficher les détails
+    st.header("Détails d'une instruction")
+    selected_title = st.selectbox("Sélectionner une instruction", filtered_data['title'])
+    if selected_title:
+        instruction_details = filtered_data[filtered_data['title'] == selected_title].iloc[0]
+        st.markdown(f"### Détails de l'instruction : {selected_title}")
+        st.markdown(f"**Année :** {instruction_details['year']}")
+        st.markdown(f"**Semaine :** {instruction_details['week']}")
+        st.markdown(f"**Objet :** {instruction_details['objet']}")
+        st.markdown(f"**Résumé :** {instruction_details['resume']}")
+        st.markdown(f"**Lien :** [{instruction_details['title']}]({instruction_details['link']})")
+        st.markdown(f"**Télécharger le PDF :** [{instruction_details['title']}]({instruction_details['pdf_link']})")
+
+# Téléchargement des données
+st.sidebar.header("Télécharger les données")
+if st.sidebar.button("Télécharger le CSV"):
+    if filtered_data.empty:
+        st.sidebar.warning("Aucune donnée à télécharger.")
+    else:
+        csv = filtered_data.to_csv(index=False).encode('utf-8')
+        st.sidebar.download_button(
+            label="Télécharger",
+            data=csv,
+            file_name="sdssa_instructions.csv",
+            mime="text/csv"
+        )
+
+# Bouton pour mettre à jour les données
+if st.sidebar.button("Mettre à jour les données"):
+    # Vérifier les semaines manquantes
+    existing_weeks = data[['year', 'week']].drop_duplicates()
+    missing_weeks = []
+    current_week = datetime.now().isocalendar()
+    for w in range(current_week[1], current_week[1] + 1):
+        if (current_week[0], w) not in existing_weeks.values:
+            missing_weeks.append((current_week[0], w))
+
+    # Récupérer et ajouter les nouvelles instructions des semaines manquantes
+    for year, week in missing_weeks:
+        new_instructions = get_new_instructions(year, week)
+        for instruction in new_instructions:
+            link = f"https://info.agriculture.gouv.fr{instruction['href']}"
+            pdf_link = link.replace("/detail", "/telechargement")  # Exemple d'ajustement
+            objet = "OBJET : Exemple"   # À extraire dynamiquement
+            resume = "RESUME : Exemple"  # À extraire dynamiquement
+            add_instruction_to_db(year, week, instruction.text, link, pdf_link, objet, resume)
+
+    # Recharger les données après la mise à jour
+    data = load_data(db_path)
+    filtered_data = data.copy()
+    st.success("Les données ont été mises à jour avec succès.")
+
+# Afficher les mises à jour récentes
+st.sidebar.header("Mises à jour récentes")
+if st.sidebar.button("Afficher les mises à jour récentes"):
+    if 'last_updated' not in data.columns:
+        st.error("La colonne 'last_updated' est manquante dans la base de données.")
+    else:
+        recent_updates = data.sort_values(by='last_updated', ascending=False).head(10)
+        st.write("Dernières mises à jour :")
+        st.dataframe(recent_updates[['title', 'link', 'pdf_link', 'objet', 'resume', 'last_updated']])
