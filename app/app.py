@@ -103,7 +103,7 @@ def add_instruction_to_db(year, week, title, link, pdf_link, objet, resume):
             last_updated=excluded.last_updated;
         """, (year, week, title, link, pdf_link, objet, resume, datetime.now()))
         conn.commit()
-    except Exception as e:
+    except sqlite3.Error as e:
         print(f"Error inserting data: {e}")
     finally:
         conn.close()
@@ -234,6 +234,7 @@ if st.sidebar.button("Télécharger le CSV"):
 
 # Bouton pour mettre à jour les données
 if st.sidebar.button("Mettre à jour les données"):
+    # Vérifier les semaines manquantes
     conn = sqlite3.connect(db_path)
     df_weeks = pd.read_sql_query("SELECT year, week FROM instructions;", conn)
     conn.close()
@@ -290,4 +291,3 @@ if st.sidebar.button("Afficher les mises à jour récentes"):
         recent_updates = data.sort_values(by='last_updated', ascending=False).head(10)
         st.write("Dernières mises à jour :")
         st.dataframe(recent_updates[['title', 'link', 'pdf_link', 'objet', 'resume', 'last_updated']])
-
