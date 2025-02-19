@@ -276,14 +276,41 @@ if st.sidebar.button("Mettre à jour les données"):
 
         st.write(f"📄 {len(new_instructions)} nouvelles instructions trouvées.")
 
-        # Ajouter les nouvelles instructions à la base de données
-        for instruction in new_instructions:
-            year, week, title, link, pdf_link, objet, resume = instruction
-            cursor.execute("SELECT COUNT(*) FROM instructions WHERE title = ?", (title,))
-            exists = cursor.fetchone()[0]
-            if exists == 0:
-                add_instruction_to_db(year, week, title, link, pdf_link, objet, resume)
-                added_count += 1
+        # Ajouter les nouvelles instructions à la base de données avec UNE SEULE connexion
+        try:
+            conn = sqlite3.connect(db_path)  # Réouvrir la connexion une fois
+            cursor = conn.cursor()
+        
+            for instruction in new_instructions:
+                year, week, title, link, pdf_link, objet, resume = instruction
+                cursor.execute("SELECT COUNT(*) FROM instructions WHERE title = ?", (title,))
+                exists = cursor.fetchone()[0]
+                
+                if exists == 0:
+                    cursor.execute("""
+                        INSERT INTO instructions (year, week, title, link, pdf_link, objet, resume, last_updated)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(title) DO UPDATE SET
+                        year=excluded.year,
+                        week=excluded.week,
+                        link=excluded.link,
+                        pdf_link=excluded.pdf_link,
+                        objet=excluded.objet,
+                        resume=excluded.resume,
+                        last_updated=excluded.last_updated;
+                    """, (year, week, title, link, pdf_link, objet, resume, datetime.now()))
+                    added_count += 1
+        
+            conn.commit()  # Valider les modifications après toutes les insertions
+        
+        except sqlite3.Error as e:
+            st.error(f"Erreur SQLite : {e}")
+        
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
 
         # Recharger les données après la mise à jour
         data = load_data(db_path)
