@@ -80,7 +80,15 @@ def get_new_instructions(year, week):
         soup = BeautifulSoup(response.content, 'html.parser')
         instructions = soup.find_all('a', href=True)
         sdssa_instructions = [a for a in instructions if 'SDSSA' in a.text]
-        return sdssa_instructions
+        new_instructions = []
+        for instruction in sdssa_instructions:
+            href = instruction['href']
+            if not href.startswith(('http://', 'https://')):
+                href = f"https://info.agriculture.gouv.fr{href}"
+            link = href
+            pdf_link = link.replace("/detail", "/telechargement")
+            new_instructions.append((instruction.text, link, pdf_link))
+        return new_instructions
     else:
         print(f"Failed to retrieve data for year {year} week {week}")
         return []
