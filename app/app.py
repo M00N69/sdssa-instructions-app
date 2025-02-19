@@ -264,7 +264,15 @@ if st.sidebar.button("Mettre à jour les données"):
             for instruction in instructions:
                 link = f"https://info.agriculture.gouv.fr{instruction['href']}"
                 pdf_link = link.replace("/detail", "/telechargement")
-                objet, resume = "OBJET : Inconnu", "RESUME : Inconnu"
+
+                # Récupérer l'objet et le résumé
+                response = requests.get(link)
+                if response.status_code == 200:
+                    soup = BeautifulSoup(response.content, 'html.parser')
+                    objet = soup.find('h1').text.strip() if soup.find('h1') else "OBJET : Inconnu"
+                    resume = soup.find('p').text.strip() if soup.find('p') else "RESUME : Inconnu"
+                else:
+                    objet, resume = "OBJET : Inconnu", "RESUME : Inconnu"
 
                 # 🔍 Vérifier si cette instruction est déjà en base
                 cursor.execute("SELECT COUNT(*) FROM instructions WHERE title = ?", (instruction.text,))
