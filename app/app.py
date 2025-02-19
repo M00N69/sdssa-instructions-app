@@ -269,10 +269,7 @@ if st.sidebar.button("Mettre à jour les données"):
         new_instructions = []
         for year, week in weeks_to_check:
             instructions = get_new_instructions(year, week)
-            for instruction in instructions:
-                link = f"https://info.agriculture.gouv.fr{instruction['href']}"
-                pdf_link = link.replace("/detail", "/telechargement")
-
+            for title, link, pdf_link in instructions:
                 # Récupérer l'objet et le résumé
                 response = requests.get(link)
                 if response.status_code == 200:
@@ -283,11 +280,11 @@ if st.sidebar.button("Mettre à jour les données"):
                     objet, resume = "OBJET : Inconnu", "RESUME : Inconnu"
 
                 # 🔍 Vérifier si cette instruction est déjà en base
-                cursor.execute("SELECT COUNT(*) FROM instructions WHERE title = ?", (instruction.text,))
+                cursor.execute("SELECT COUNT(*) FROM instructions WHERE title = ?", (title,))
                 exists = cursor.fetchone()[0]
 
                 if exists == 0:
-                    new_instructions.append((year, week, instruction.text, link, pdf_link, objet, resume))
+                    new_instructions.append((year, week, title, link, pdf_link, objet, resume))
 
         st.write(f"📄 {len(new_instructions)} nouvelles instructions trouvées.")
 
