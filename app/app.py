@@ -318,5 +318,5 @@ if st.sidebar.button("Afficher les mises à jour récentes"):
     else:
         recent_updates = data.sort_values(by='last_updated', ascending=False).head(10)
         st.write("Dernières mises à jour :")
-        st.dataframe(recent_updateslast_updated']])
-```[['title', 'link', 'pdf_link', 'objet', 'resume', '
+        st.dataframe(recent_updates[['title', 'link', 'pdf_link', 'objet', 'resume', 'last_updated']])
+
