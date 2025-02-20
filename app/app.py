@@ -87,7 +87,25 @@ def get_new_instructions(year, week):
                 href = f"https://info.agriculture.gouv.fr{href}"
             link = href
             pdf_link = link.replace("/detail", "/telechargement")
-            new_instructions.append((instruction.text, link, pdf_link))
+
+            # Récupérer l'objet et le résumé
+            response = requests.get(link)
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.content, 'html.parser')
+                objet = "OBJET : Inconnu"
+                resume = "RESUME : Inconnu"
+
+                # Trouver l'objet
+                objet_tag = soup.find('b', text="OBJET : ")
+                if objet_tag:
+                    objet = objet_tag.next_sibling.strip()
+
+                # Trouver le résumé
+                resume_tag = soup.find('b', text="RESUME : ")
+                if resume_tag:
+                    resume = resume_tag.next_sibling.strip()
+
+            new_instructions.append((instruction.text, link, pdf_link, objet, resume))
         return new_instructions
     else:
         print(f"Failed to retrieve data for year {year} week {week}")
@@ -269,16 +287,7 @@ if st.sidebar.button("Mettre à jour les données"):
         new_instructions = []
         for year, week in weeks_to_check:
             instructions = get_new_instructions(year, week)
-            for title, link, pdf_link in instructions:
-                # Récupérer l'objet et le résumé
-                response = requests.get(link)
-                if response.status_code == 200:
-                    soup = BeautifulSoup(response.content, 'html.parser')
-                    objet = soup.find('h1').text.strip() if soup.find('h1') else "OBJET : Inconnu"
-                    resume = soup.find('p').text.strip() if soup.find('p') else "RESUME : Inconnu"
-                else:
-                    objet, resume = "OBJET : Inconnu", "RESUME : Inconnu"
-
+            for title, link, pdf_link, objet, resume in instructions:
                 # 🔍 Vérifier si cette instruction est déjà en base
                 cursor.execute("SELECT COUNT(*) FROM instructions WHERE title = ?", (title,))
                 exists = cursor.fetchone()[0]
@@ -332,4 +341,5 @@ if st.sidebar.button("Afficher les mises à jour récentes"):
         recent_updates = data.sort_values(by='last_updated', ascending=False).head(10)
         st.write("Dernières mises à jour :")
         st.dataframe(recent_updates[['title', 'link', 'pdf_link', 'objet', 'resume', 'last_updated']])
+
 
