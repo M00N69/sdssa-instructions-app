@@ -13,6 +13,9 @@ from nltk.corpus import wordnet
 from nltk.stem import WordNetLemmatizer
 from nltk.tokenize import word_tokenize
 from datetime import datetime, timedelta
+import time
+import traceback
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Configuration de la page
 st.set_page_config(layout="wide")
@@ -24,6 +27,57 @@ except LookupError:
     nltk.download('punkt')
 nltk.download('wordnet')
 nltk.download('omw-1.4')
+
+# Créer le répertoire data s'il n'existe pas
+os.makedirs('data', exist_ok=True)
+
+# Fonction pour vérifier et créer la structure de la base de données si nécessaire
+def ensure_database_structure():
+    db_path = 'data/sdssa_instructions.db'
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    try:
+        # Vérifier si la table existe
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='instructions'")
+        table_exists = cursor.fetchone()
+
+        if not table_exists:
+            # Créer la table si elle n'existe pas
+            cursor.execute("""
+                CREATE TABLE instructions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    year INTEGER,
+                    week INTEGER,
+                    title TEXT UNIQUE,
+                    link TEXT,
+                    pdf_link TEXT,
+                    objet TEXT,
+                    resume TEXT,
+                    last_updated TIMESTAMP
+                )
+            """)
+            conn.commit()
+            st.success("Structure de la base de données créée avec succès.")
+
+        # Vérifier si la colonne last_updated existe
+        cursor.execute("PRAGMA table_info(instructions)")
+        columns = [column[1] for column in cursor.fetchall()]
+
+        if 'last_updated' not in columns:
+            cursor.execute("ALTER TABLE instructions ADD COLUMN last_updated TIMESTAMP")
+            conn.commit()
+            st.success("Colonne last_updated ajoutée à la table instructions.")
+
+        return True
+    except sqlite3.Error as e:
+        st.error(f"Erreur lors de la création de la structure de la base de données: {e}")
+        return False
+    finally:
+        cursor.close()
+        conn.close()
+
+# Appeler la fonction pour s'assurer que la structure de la base de données est correcte
+ensure_database_structure()
 
 # Fonction pour vérifier si la base de données existe
 def check_database():
@@ -75,40 +129,50 @@ def normalize_text(text):
 # Fonction pour récupérer les nouvelles instructions des semaines manquantes
 def get_new_instructions(year, week):
     url = f"https://info.agriculture.gouv.fr/boagri/historique/annee-{year}/semaine-{week}"
-    response = requests.get(url)
-    if response.status_code == 200:
-        soup = BeautifulSoup(response.content, 'html.parser')
-        instructions = soup.find_all('a', href=True)
-        sdssa_instructions = [a for a in instructions if 'SDSSA' in a.text]
-        new_instructions = []
-        for instruction in sdssa_instructions:
-            href = instruction['href']
-            if not href.startswith(('http://', 'https://')):
-                href = f"https://info.agriculture.gouv.fr{href}"
-            link = href
-            pdf_link = link.replace("/detail", "/telechargement")
+    try:
+        response = requests.get(url, timeout=10)  # Ajouter un timeout
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.content, 'html.parser')
+            instructions = soup.find_all('a', href=True)
+            sdssa_instructions = [a for a in instructions if 'SDSSA' in a.text]
+            new_instructions = []
+            for instruction in sdssa_instructions:
+                href = instruction['href']
+                if not href.startswith(('http://', 'https://')):
+                    href = f"https://info.agriculture.gouv.fr{href}"
+                link = href
+                pdf_link = link.replace("/detail", "/telechargement")
 
-            # Récupérer l'objet et le résumé
-            response = requests.get(link)
-            if response.status_code == 200:
-                soup = BeautifulSoup(response.content, 'html.parser')
-                objet = "OBJET : Inconnu"
-                resume = "RESUME : Inconnu"
+                # Récupérer l'objet et le résumé
+                try:
+                    detail_response = requests.get(link, timeout=10)
+                    if detail_response.status_code == 200:
+                        soup = BeautifulSoup(detail_response.content, 'html.parser')
+                        objet = "OBJET : Inconnu"
+                        resume = "RESUME : Inconnu"
 
-                # Trouver l'objet
-                objet_tag = soup.find('b', text="OBJET : ")
-                if objet_tag:
-                    objet = objet_tag.next_sibling.strip()
+                        # Trouver l'objet
+                        objet_tag = soup.find('b', text="OBJET : ")
+                        if objet_tag and objet_tag.next_sibling:
+                            objet = objet_tag.next_sibling.strip()
 
-                # Trouver le résumé
-                resume_tag = soup.find('b', text="RESUME : ")
-                if resume_tag:
-                    resume = resume_tag.next_sibling.strip()
+                        # Trouver le résumé
+                        resume_tag = soup.find('b', text="RESUME : ")
+                        if resume_tag and resume_tag.next_sibling:
+                            resume = resume_tag.next_sibling.strip()
 
-            new_instructions.append((instruction.text, link, pdf_link, objet, resume))
-        return new_instructions
-    else:
-        print(f"Failed to retrieve data for year {year} week {week}")
+                        new_instructions.append((instruction.text, link, pdf_link, objet, resume))
+                except requests.RequestException as e:
+                    st.warning(f"Erreur lors de la récupération des détails pour {link}: {e}")
+                    # Ajouter quand même l'instruction avec des informations partielles
+                    new_instructions.append((instruction.text, link, pdf_link, "OBJET : Inconnu", "RESUME : Inconnu"))
+
+            return new_instructions
+        else:
+            st.warning(f"Impossible de récupérer les données pour l'année {year} semaine {week} (Status code: {response.status_code})")
+            return []
+    except requests.RequestException as e:
+        st.error(f"Erreur de connexion pour l'année {year} semaine {week}: {e}")
         return []
 
 # Fonction pour ajouter une instruction à la base de données
@@ -116,22 +180,32 @@ def add_instruction_to_db(year, week, title, link, pdf_link, objet, resume):
     conn = sqlite3.connect('data/sdssa_instructions.db')
     cursor = conn.cursor()
     try:
-        cursor.execute("""
-            INSERT INTO instructions (year, week, title, link, pdf_link, objet, resume, last_updated)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(title) DO UPDATE SET
-            year=excluded.year,
-            week=excluded.week,
-            link=excluded.link,
-            pdf_link=excluded.pdf_link,
-            objet=excluded.objet,
-            resume=excluded.resume,
-            last_updated=excluded.last_updated;
-        """, (year, week, title, link, pdf_link, objet, resume, datetime.now()))
+        # Vérifier si l'instruction existe déjà
+        cursor.execute("SELECT COUNT(*) FROM instructions WHERE title = ?", (title,))
+        exists = cursor.fetchone()[0]
+
+        if exists > 0:
+            # Mettre à jour l'instruction existante
+            cursor.execute("""
+                UPDATE instructions
+                SET year=?, week=?, link=?, pdf_link=?, objet=?, resume=?, last_updated=?
+                WHERE title=?
+            """, (year, week, link, pdf_link, objet, resume, datetime.now(), title))
+        else:
+            # Insérer une nouvelle instruction
+            cursor.execute("""
+                INSERT INTO instructions (year, week, title, link, pdf_link, objet, resume, last_updated)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (year, week, title, link, pdf_link, objet, resume, datetime.now()))
+
         conn.commit()
+        return True
     except sqlite3.Error as e:
-        print(f"Error inserting data: {e}")
+        st.error(f"Erreur d'insertion/mise à jour dans la base de données: {e}")
+        conn.rollback()
+        return False
     finally:
+        cursor.close()
         conn.close()
 
 # Fonction pour vérifier les nouvelles notes
@@ -150,7 +224,6 @@ def check_for_new_notes():
         # Trouver la dernière semaine enregistrée
         cursor.execute("SELECT MAX(year), MAX(week) FROM instructions;")
         latest_entry = cursor.fetchone()
-        print(f"Dernière entrée dans la base de données : {latest_entry}")
 
         # Si la base est vide, on commence en 2019 semaine 1
         if latest_entry == (None, None):
@@ -158,23 +231,21 @@ def check_for_new_notes():
         else:
             latest_year, latest_week = latest_entry
 
-        print(f"Dernière année : {latest_year}, Dernière semaine : {latest_week}")
+        st.write(f"Dernière année : {latest_year}, Dernière semaine : {latest_week}")
 
         current_year, current_week, _ = datetime.now().isocalendar()
-        print(f"Année actuelle : {current_year}, Semaine actuelle : {current_week}")
+        st.write(f"Année actuelle : {current_year}, Semaine actuelle : {current_week}")
 
-        # Vérifier si la base de données est vide ou si les valeurs sont incorrectes
+        # Vérifier si la base de données est à jour
         if latest_year > current_year or (latest_year == current_year and latest_week >= current_week):
-            print("Les valeurs de la base de données semblent incorrectes ou la base est vide.")
-            st.write("Aucune semaine à vérifier.")
+            st.info("La base de données est déjà à jour.")
             return
 
-        # Identifier les semaines à vérifier (uniquement après la dernière semaine en base)
+        # Identifier les semaines à vérifier
         weeks_to_check = []
         for year in range(latest_year, current_year + 1):
             start_week = latest_week + 1 if year == latest_year else 1
-            end_week = current_week if year == current_year else 52  # Utiliser 52 pour inclure la dernière semaine
-            print(f"Année {year} : Vérification des semaines {start_week} à {end_week}")
+            end_week = current_week if year == current_year else 52
             for week in range(start_week, end_week + 1):
                 weeks_to_check.append((year, week))
 
@@ -182,11 +253,12 @@ def check_for_new_notes():
             st.write("Aucune semaine à vérifier.")
             return
 
-        st.write(f"Semaines à vérifier : {weeks_to_check}")
+        st.write(f"Semaines à vérifier : {len(weeks_to_check)}")
+        progress_bar = st.progress(0)
 
         # Récupérer uniquement les nouvelles instructions
         new_instructions = []
-        for year, week in weeks_to_check:
+        for i, (year, week) in enumerate(weeks_to_check):
             instructions = get_new_instructions(year, week)
             for title, link, pdf_link, objet, resume in instructions:
                 # Vérifier si cette instruction est déjà en base
@@ -196,19 +268,19 @@ def check_for_new_notes():
                 if exists == 0:
                     new_instructions.append((year, week, title, link, pdf_link, objet, resume))
 
+            # Mettre à jour la barre de progression
+            progress = (i + 1) / len(weeks_to_check)
+            progress_bar.progress(progress)
+
         st.write(f"{len(new_instructions)} nouvelles instructions trouvées.")
 
         # Ajouter les nouvelles instructions à la base
         added_count = 0
         for instruction in new_instructions:
             year, week, title, link, pdf_link, objet, resume = instruction
-            cursor.execute("""
-                INSERT INTO instructions (year, week, title, link, pdf_link, objet, resume, last_updated)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, (year, week, title, link, pdf_link, objet, resume, datetime.now()))
-            added_count += 1
-
-        conn.commit()
+            # Utiliser la fonction add_instruction_to_db au lieu d'exécuter directement la requête
+            if add_instruction_to_db(year, week, title, link, pdf_link, objet, resume):
+                added_count += 1
 
         if added_count > 0:
             st.success(f"{added_count} nouvelles instructions ont été ajoutées !")
@@ -219,11 +291,10 @@ def check_for_new_notes():
         st.error(f"Erreur SQLite : {e}")
     except Exception as e:
         st.error(f"Erreur inattendue : {e}")
+        st.error(traceback.format_exc())
     finally:
-        if cursor:
-            cursor.close()
-        if conn:
-            conn.close()
+        cursor.close()
+        conn.close()
 
 # Vérifier la base de données
 db_path = check_database()
@@ -351,7 +422,14 @@ if st.sidebar.button("Télécharger le CSV"):
 
 # Bouton pour mettre à jour les données
 if st.sidebar.button("Mettre à jour les données"):
-    check_for_new_notes()
+    with st.spinner("Vérification des nouvelles instructions..."):
+        success = check_for_new_notes()
+        if success:
+            # Recharger les données après la mise à jour
+            data = load_data(db_path)
+            # Recréer l'index Whoosh
+            ix = create_whoosh_index(data)
+            st.success("Mise à jour terminée et données rechargées.")
 
 # Afficher les mises à jour récentes
 st.sidebar.header("Mises à jour récentes")
@@ -362,3 +440,15 @@ if st.sidebar.button("Afficher les mises à jour récentes"):
         recent_updates = data.sort_values(by='last_updated', ascending=False).head(10)
         st.write("Dernières mises à jour :")
         st.dataframe(recent_updates[['title', 'link', 'pdf_link', 'objet', 'resume', 'last_updated']])
+
+# Options avancées pour la mise à jour automatique
+with st.sidebar.expander("Options avancées"):
+    auto_update_freq = st.selectbox(
+        "Fréquence de mise à jour automatique",
+        ["Désactivée", "Quotidienne", "Hebdomadaire", "Mensuelle"]
+    )
+
+    if auto_update_freq != "Désactivée":
+        st.info(f"La mise à jour automatique est configurée sur: {auto_update_freq}")
+        # Cette fonctionnalité nécessiterait un mécanisme de planification
+        # comme APScheduler, ou une configuration externe avec cron
