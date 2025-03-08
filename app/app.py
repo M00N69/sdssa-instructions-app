@@ -76,7 +76,8 @@ def check_database():
 def load_data(db_path):
     """Charge les données depuis la base de données."""
     conn = sqlite3.connect(db_path)
-    df = pd.read_sql_query("SELECT * FROM instructions", conn)
+    query = "SELECT * FROM instructions"
+    df = pd.read_sql_query(query, conn)
     conn.close()
     return df
 
@@ -296,15 +297,20 @@ if st.sidebar.button("Mettre à jour les données"):
         new_notes_added = False # Flag to track if new notes were added
 
         try:
-            cursor.execute("SELECT MAX(year), MAX(week) FROM instructions")
+            cursor.execute("SELECT MAX(year), CAST(MAX(week) AS INTEGER) FROM instructions") # **CAST week AS INTEGER**
             latest_year_db, latest_week_db = cursor.fetchone()
             latest_year_db = latest_year_db if latest_year_db else 2019
             latest_week_db = latest_week_db if latest_week_db else 0
 
             current_year, current_week, _ = datetime.now().isocalendar()
 
-            st.write(f"**DEBUG - DB Latest Year:** {latest_year_db}, **DB Latest Week:** {latest_week_db}") # DEBUG
+            st.write(f"**DEBUG - DB Latest Year:** {latest_year_db}, **DB Latest Week:** {latest_week_db} (after CAST to INT)") # DEBUG
             st.write(f"**DEBUG - Current Year:** {current_year}, **Current Week:** {current_week}") # DEBUG
+
+            # Fetch table schema for debugging
+            cursor.execute("PRAGMA table_info(instructions)")
+            table_schema = cursor.fetchall()
+            st.write("**DEBUG - Table Schema:**", table_schema) # DEBUG - Print table schema
 
             weeks_to_check = []
             processed_weeks = set() # To avoid duplicates
