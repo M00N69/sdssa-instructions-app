@@ -146,15 +146,19 @@ def check_for_new_notes():
         # Si la base est vide, on commence en 2019 semaine 1
         latest_year, latest_week = latest_entry if latest_entry != (None, None) else (2019, 1)
 
-        current_year, current_week = datetime.now().isocalendar()[:2]
+        current_year, current_week, _ = datetime.now().isocalendar()
 
         # Identifier les semaines à vérifier (uniquement après la dernière semaine en base)
         weeks_to_check = []
         for year in range(latest_year, current_year + 1):
             start_week = latest_week + 1 if year == latest_year else 1
-            end_week = current_week if year == current_year else 52
+            end_week = current_week if year == current_year else 53  # Utiliser 53 pour inclure la dernière semaine
             for week in range(start_week, end_week + 1):
                 weeks_to_check.append((year, week))
+
+        if not weeks_to_check:
+            st.write("Aucune semaine à vérifier.")
+            return
 
         st.write(f"Semaines à vérifier : {weeks_to_check}")
 
@@ -336,4 +340,3 @@ if st.sidebar.button("Afficher les mises à jour récentes"):
         recent_updates = data.sort_values(by='last_updated', ascending=False).head(10)
         st.write("Dernières mises à jour :")
         st.dataframe(recent_updates[['title', 'link', 'pdf_link', 'objet', 'resume', 'last_updated']])
-
