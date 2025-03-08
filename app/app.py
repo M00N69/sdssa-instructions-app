@@ -132,7 +132,6 @@ def create_whoosh_index(df):
         st.stop()
         return None
 
-
 # Fonction pour trouver des synonymes
 def get_synonyms(word):
     synonyms = set()
@@ -253,7 +252,7 @@ def check_for_new_notes():
         else:
             latest_year, latest_week = latest_entry
 
-        st.write(f"Dernière année enregistrée : {latest_year}, Dernière semaine enregistrée : {latest_week}")
+        st.write(f"Dernière année enregistrée (base de données): {latest_year}, Dernière semaine enregistrée (base de données): {latest_week}")
 
         current_year, current_week, _ = datetime.now().isocalendar()
         st.write(f"Année actuelle : {current_year}, Semaine actuelle : {current_week}")
@@ -261,18 +260,22 @@ def check_for_new_notes():
         # Vérifier si la base de données est à jour
         if latest_year > current_year or (latest_year == current_year and latest_week >= current_week):
             st.info("La base de données est déjà à jour.")
+            st.write("Condition pour 'base de données à jour' est VRAIE.") # Debug print
             return
+        else:
+            st.write("Condition pour 'base de données à jour' est FAUSSE. Procéder à la vérification des semaines.") # Debug print
 
         # Identifier les semaines à vérifier
         weeks_to_check = []
         for year in range(latest_year, current_year + 1):
             start_week = latest_week + 1 if year == latest_year else 1
-            end_week = current_week if year == current_year else 52 # Corrected to current_week
+            end_week = current_week if year == current_year else 52
             if year == current_year:
-                end_week = current_week # Ensure end_week is current_week for current year
+                end_week = current_week
             else:
-                end_week = 52 # For past years, check up to week 52
+                end_week = 52
 
+            st.write(f"Pour l'année {year}: start_week={start_week}, end_week={end_week}") # Debug print
             for week in range(start_week, end_week + 1):
                 weeks_to_check.append((year, week))
 
