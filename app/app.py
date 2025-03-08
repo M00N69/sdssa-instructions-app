@@ -309,7 +309,6 @@ if st.sidebar.button("Mettre à jour les données"):
 
             weeks_to_check = []
             processed_weeks = set()
-
             start_year = latest_year_db
             start_week = latest_week_db + 1
 
@@ -324,14 +323,15 @@ if st.sidebar.button("Mettre à jour les données"):
                 start_week_for_year = start_week if year_to_check == start_year else 1
                 end_week_for_year = current_week if year_to_check == current_year else 52
 
+                st.write(f"**DEBUG - Year to check:** {year_to_check}, Start Week: {start_week_for_year}, End Week: {end_week_for_year}") # DEBUG
+
                 for week_num in range(start_week_for_year, end_week_for_year + 1):
-                    if (year_to_check, week_num) not in processed_weeks and week_num <=52: # **ADDED week_num <= 52 check here**
+                    if (year_to_check, week_num) not in processed_weeks and week_num <= 52:
                         weeks_to_check.append((year_to_check, week_num))
                         processed_weeks.add((year_to_check, week_num))
-                        st.write(f"**DEBUG - Adding week to check:** {(year_to_check, week_num)}")
+                        st.write(f"**DEBUG - Adding week to check:** {(year_to_check, week_num)}") # DEBUG
 
-                start_week = 1 # Reset start_week to 1 for subsequent years
-
+                start_week = 1  # Reset start_week to 1 for subsequent years, AFTER inner week loop
 
             st.write(f"**Semaines à vérifier (FINAL):** {weeks_to_check}") # DEBUG: Print weeks to check
 
