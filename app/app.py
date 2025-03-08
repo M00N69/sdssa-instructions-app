@@ -32,7 +32,6 @@ nltk.download('omw-1.4')
 os.makedirs('data', exist_ok=True)
 
 # --- Fonctions de gestion de la base de données SQLite ---
-# (fonctions ensure_database_structure, check_database, load_data, add_instruction_to_db - inchangées)
 def ensure_database_structure():
     """Vérifie et crée la structure de la base de données."""
     db_path = 'data/sdssa_instructions.db'
@@ -101,7 +100,6 @@ def add_instruction_to_db(year, week, title, link, pdf_link, objet, resume):
         conn.close()
 
 # --- Fonctions de Web Scraping ---
-# (fonction get_new_instructions - inchangée)
 def get_new_instructions(year, week):
     """Récupère les nouvelles instructions SDSSA pour une année et semaine données."""
     url = f"https://info.agriculture.gouv.fr/boagri/historique/annee-{year}/semaine-{week}"
@@ -139,7 +137,6 @@ def get_new_instructions(year, week):
         return []
 
 # --- Fonctions de Normalisation de Texte et Indexation Whoosh ---
-# (fonctions create_whoosh_index, get_synonyms, normalize_text - inchangées)
 def create_whoosh_index(df):
     """Crée ou ouvre l'index Whoosh."""
     analyzer = StemmingAnalyzer() | LowercaseFilter() | StopFilter()
@@ -314,10 +311,19 @@ if st.sidebar.button("Mettre à jour les données"):
                         continue
                     weeks_to_check.append((year_to_check, week_num))
 
+            st.write(f"**Semaines à vérifier:** {weeks_to_check}") # DEBUG: Print weeks to check
+
             new_instructions_total = 0
             for year_to_check, week_num in weeks_to_check:
+                # DEBUG: Print URL being requested for each week
+                url_to_check = f"https://info.agriculture.gouv.fr/boagri/historique/annee-{year_to_check}/semaine-{week_num}"
+                st.write(f"Vérification de l'URL: {url_to_check}")
+
                 instructions = get_new_instructions(year_to_check, week_num)
                 new_instructions_total += len(instructions)
+
+                st.write(f"Instructions récupérées pour année {year_to_check}, semaine {week_num}: {len(instructions)}") # DEBUG: Print instructions found per week
+
                 for title, link, pdf_link, objet, resume in instructions:
                     if add_instruction_to_db(year_to_check, week_num, title, link, pdf_link, objet, resume):
                         new_notes_added = True # Set flag to True if any new note is added
