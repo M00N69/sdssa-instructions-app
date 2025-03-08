@@ -4,7 +4,7 @@ import sqlite3
 import os
 import requests
 from bs4 import BeautifulSoup
-from whoosh.index import create_in
+from whoosh.index import create_in, exists_in, open_dir, LockError
 from whoosh.fields import Schema, TEXT, ID
 from whoosh.qparser import QueryParser
 from whoosh.analysis import StemmingAnalyzer, LowercaseFilter, StopFilter
@@ -102,14 +102,36 @@ def create_whoosh_index(df):
                     objet=TEXT(stored=True, analyzer=analyzer),
                     resume=TEXT(stored=True, analyzer=analyzer),
                     content=TEXT(analyzer=analyzer))
-    if not os.path.exists("indexdir"):
-        os.mkdir("indexdir")
-    ix = create_in("indexdir", schema)
-    writer = ix.writer()
-    for index, row in df.iterrows():
-        writer.add_document(title=row['title'], objet=row['objet'], resume=row['resume'], content=f"{row['title']} {row['objet']} {row['resume']}")
-    writer.commit()
-    return ix
+    index_dir = "indexdir" # Define index directory
+    if not os.path.exists(index_dir):
+        os.mkdir(index_dir)
+
+    try:
+        if not exists_in(index_dir): # Check if index already exists
+            ix = create_in(index_dir, schema) # Create a new index
+            st.info("Creating Whoosh index...") # Inform user index is being created
+        else:
+            ix = open_dir(index_dir) # Open existing index
+            st.info("Opening existing Whoosh index...") # Inform user existing index is being opened
+
+        writer = ix.writer() # Get writer - this is where LockError can occur
+        for index, row in df.iterrows():
+            writer.add_document(title=row['title'], objet=row['objet'], resume=row['resume'], content=f"{row['title']} {row['objet']} {row['resume']}")
+        writer.commit()
+        st.success("Whoosh index updated successfully.") # Indicate index update success
+        return ix
+
+    except LockError as e:
+        st.error(f"Erreur de verrouillage de l'index Whoosh: {e}") # More informative error message
+        st.error("Veuillez réessayer de mettre à jour les données plus tard. Si le problème persiste, redémarrez l'application.") # User guidance
+        st.stop() # Stop the app to prevent further issues with locked index
+        return None # Or handle as appropriate, e.g., return a flag indicating failure
+    except Exception as e: # Catch other potential exceptions during indexing
+        st.error(f"Erreur inattendue lors de la création/mise à jour de l'index Whoosh: {e}")
+        st.error(traceback.format_exc()) # Show full traceback for debugging
+        st.stop()
+        return None
+
 
 # Fonction pour trouver des synonymes
 def get_synonyms(word):
@@ -425,12 +447,15 @@ if st.sidebar.button("Télécharger le CSV"):
 # Bouton pour mettre à jour les données
 if st.sidebar.button("Mettre à jour les données"):
     with st.spinner("Vérification des nouvelles instructions..."):
-        check_for_new_notes() # No need to capture return value if it's just UI update
+        check_for_new_notes()
         # Recharger les données après la mise à jour
         data = load_data(db_path)
         # Recréer l'index Whoosh
         ix = create_whoosh_index(data)
-        st.success("Mise à jour terminée et données rechargées.")
+        if ix:
+            st.success("Mise à jour terminée et données rechargées.")
+        else:
+            st.error("La mise à jour de l'index a échoué. Veuillez consulter les erreurs ci-dessus.")
 
 # Afficher les mises à jour récentes
 st.sidebar.header("Mises à jour récentes")
