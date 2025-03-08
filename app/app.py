@@ -343,12 +343,16 @@ if st.sidebar.button("Mettre à jour les données"):
                         weeks_to_check.append((current_year, week_num))
                         processed_weeks.add((current_year, week_num))
 
+            st.write(f"Semaines à vérifier: {weeks_to_check}")  # Debugging line
+
             new_instructions_total = 0
             for year_to_check, week_num in weeks_to_check:
+                st.write(f"Vérification de l'année {year_to_check}, semaine {week_num}...")  # Debugging line
                 instructions = get_new_instructions(year_to_check, week_num)
                 new_instructions_total += len(instructions)
 
                 for title, link, pdf_link, objet, resume in instructions:
+                    st.write(f"Ajout de l'instruction: {title}")  # Debugging line
                     if add_instruction_to_db(year_to_check, week_num, title, link, pdf_link, objet, resume):
                         new_notes_added = True  # Set flag to True if any new note is added
 
