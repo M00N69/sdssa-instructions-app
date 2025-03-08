@@ -275,11 +275,12 @@ def check_for_new_notes():
                 end_week = 52
 
             st.write(f"Pour l'année {year}: start_week={start_week}, end_week={end_week}") # Debug print
-            for week in range(start_week, end_week + 1):
-                if year == latest_year and week <= latest_week: # Skip already processed weeks
-                    st.write(f"Saut de la semaine {week} de l'année {year} (déjà traitée).") # Debug print - Skipping week
+            for week_num in range(start_week, end_week + 1): # Renamed week to week_num to avoid shadowing
+                if year == latest_year and week_num <= latest_week: # Skip already processed weeks
+                    st.write(f"Saut de la semaine {week_num} de l'année {year} (déjà traitée).") # Debug print - Skipping week
                     continue # Skip weeks already in DB
-                weeks_to_check.append((year, week))
+                weeks_to_check.append((year, week_num))
+                st.write(f"Ajout de la semaine {week_num} de l'année {year} à la liste de vérification.") # Debug print - Adding week
 
         st.write(f"Semaines à vérifier : {weeks_to_check}") # Affichage des semaines à vérifier
         progress_bar = st.progress(0) # Barre de progression pour le processus de mise à jour
@@ -484,7 +485,7 @@ else:
     else:
         filtered_data = filtered_data[filtered_data['year'] == year]
 
-# Affichage du nombre de résultats filtrés
+# Afficher les résultats filtrés
 if filtered_data.empty:
     st.write("Aucun résultat trouvé avec les filtres actuels.")
 else:
