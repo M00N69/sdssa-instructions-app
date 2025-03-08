@@ -214,7 +214,7 @@ def check_for_new_notes():
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     try:
-        # Vérification de la connexion à la base de données
+        # Vérifier la connexion à la base de données
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='instructions';")
         table_exists = cursor.fetchone()
         if not table_exists:
@@ -235,8 +235,8 @@ def check_for_new_notes():
         current_year, current_week, _ = datetime.now().isocalendar()
         st.write(f"Année actuelle : {current_year}, Semaine actuelle : {current_week}")
 
-        # **DETAILED DEBUGGING OF "UP-TO-DATE" CONDITION**
-        st.write("--- Début du débogage de la condition 'mise à jour nécessaire' ---")
+        # **REVISED DETAILED DEBUGGING OF "UP-TO-DATE" CONDITION**
+        st.write("--- Début du débogage de la condition 'mise à jour nécessaire' (REVISÉ) ---")
         is_db_empty = latest_entry == (None, None)
         st.write(f"La base de données est vide ? : {is_db_empty}")
         is_latest_year_less_than_current_year = latest_year < current_year if latest_year is not None else False # Handle None case
@@ -244,19 +244,24 @@ def check_for_new_notes():
         is_same_year_and_latest_week_less_than_current_week = False
         if latest_year == current_year:
             is_same_year_and_latest_week_less_than_current_week = latest_week < current_week if latest_week is not None else False # Handle None case
-        st.write(f"Même année et Dernière semaine < Semaine actuelle ? : {is_same_year_and_latest_week_less_than_current_week}")
+        st.write(f"Même année et Dernière semaine < Semaine actuelle ? (CONDITION ORIGINALE): {is_same_year_and_latest_week_less_than_current_week}")
+        is_same_year_and_latest_week_GREATER_than_current_week = False # NEW condition check
+        if latest_year == current_year:
+            is_same_year_and_latest_week_GREATER_than_current_week = latest_week > current_week if latest_week is not None else False
+        st.write(f"Même année et Dernière semaine > Semaine actuelle ? (NOUVELLE CONDITION): {is_same_year_and_latest_week_GREATER_than_current_week}")
 
-        needs_update = is_db_empty or is_latest_year_less_than_current_year or is_same_year_and_latest_week_less_than_current_week
-        st.write(f"Besoin de mise à jour ? (calculé) : {needs_update}") # Debug print - Calculated needs_update
-        st.write("--- Fin du débogage de la condition 'mise à jour nécessaire' ---")
+
+        needs_update = is_db_empty or is_latest_year_less_than_current_year or is_same_year_and_latest_week_less_than_current_week or is_same_year_and_latest_week_GREATER_than_current_week # REVISED needs_update condition
+        st.write(f"Besoin de mise à jour ? (calculé REVISÉ) : {needs_update}") # Debug print - Calculated needs_update
+        st.write("--- Fin du débogage de la condition 'mise à jour nécessaire' (REVISÉ) ---")
 
 
         if not needs_update:
             st.info("La base de données est déjà à jour.")
-            st.write("Condition pour 'besoin de mise à jour' est FAUSSE. Base de données considérée à jour.") # Debug print
+            st.write("Condition pour 'besoin de mise à jour' est FAUSSE (REVISÉE). Base de données considérée à jour.") # Debug print
             return
         else:
-            st.write("Condition pour 'besoin de mise à jour' est VRAIE. Procéder à la vérification des semaines.") # Debug print
+            st.write("Condition pour 'besoin de mise à jour' est VRAIE (REVISÉE). Procéder à la vérification des semaines.") # Debug print
 
 
         # Identifier les semaines à vérifier
