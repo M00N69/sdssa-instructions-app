@@ -231,7 +231,7 @@ def check_for_new_notes():
         else:
             latest_year, latest_week = latest_entry
 
-        st.write(f"Dernière année : {latest_year}, Dernière semaine : {latest_week}")
+        st.write(f"Dernière année enregistrée : {latest_year}, Dernière semaine enregistrée : {latest_week}")
 
         current_year, current_week, _ = datetime.now().isocalendar()
         st.write(f"Année actuelle : {current_year}, Semaine actuelle : {current_week}")
@@ -245,21 +245,23 @@ def check_for_new_notes():
         weeks_to_check = []
         for year in range(latest_year, current_year + 1):
             start_week = latest_week + 1 if year == latest_year else 1
-            end_week = current_week if year == current_year else 52
+            end_week = current_week if year == current_year else 52 # Corrected to current_week
+            if year == current_year:
+                end_week = current_week # Ensure end_week is current_week for current year
+            else:
+                end_week = 52 # For past years, check up to week 52
+
             for week in range(start_week, end_week + 1):
                 weeks_to_check.append((year, week))
 
-        if not weeks_to_check:
-            st.write("Aucune semaine à vérifier.")
-            return
-
-        st.write(f"Semaines à vérifier : {len(weeks_to_check)}")
+        st.write(f"Semaines à vérifier : {weeks_to_check}") # Display weeks to be checked
         progress_bar = st.progress(0)
 
         # Récupérer uniquement les nouvelles instructions
         new_instructions = []
         for i, (year, week) in enumerate(weeks_to_check):
             instructions = get_new_instructions(year, week)
+            st.write(f"Instructions récupérées pour l'année {year} semaine {week}: {len(instructions)}") # Display num instructions per week
             for title, link, pdf_link, objet, resume in instructions:
                 # Vérifier si cette instruction est déjà en base
                 cursor.execute("SELECT COUNT(*) FROM instructions WHERE title = ?", (title,))
@@ -423,13 +425,12 @@ if st.sidebar.button("Télécharger le CSV"):
 # Bouton pour mettre à jour les données
 if st.sidebar.button("Mettre à jour les données"):
     with st.spinner("Vérification des nouvelles instructions..."):
-        success = check_for_new_notes()
-        if success:
-            # Recharger les données après la mise à jour
-            data = load_data(db_path)
-            # Recréer l'index Whoosh
-            ix = create_whoosh_index(data)
-            st.success("Mise à jour terminée et données rechargées.")
+        check_for_new_notes() # No need to capture return value if it's just UI update
+        # Recharger les données après la mise à jour
+        data = load_data(db_path)
+        # Recréer l'index Whoosh
+        ix = create_whoosh_index(data)
+        st.success("Mise à jour terminée et données rechargées.")
 
 # Afficher les mises à jour récentes
 st.sidebar.header("Mises à jour récentes")
