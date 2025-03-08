@@ -306,23 +306,19 @@ if st.sidebar.button("Mettre à jour les données"):
 
             # Définir l'année de départ (2019 ou la plus ancienne en base)
             start_year = 2019
-            if existing_weeks:
-                start_year = min(year for year, _ in existing_weeks)
 
-            st.write(f"**DEBUG - Année de départ:** {start_year}, **Année actuelle:** {current_year}, **Semaine actuelle:** {current_week}")
+            st.write(f"**Année actuelle:** {current_year}, **Semaine actuelle:** {current_week}")
 
-            # Générer toutes les combinaisons année/semaine possibles depuis 2019 jusqu'à maintenant
-            all_possible_weeks = []
+            # Générer une liste des semaines à vérifier (seulement les semaines manquantes)
+            weeks_to_check = []
             for year in range(start_year, current_year + 1):
                 max_week = 52
                 if year == current_year:
                     max_week = current_week
 
                 for week in range(1, max_week + 1):
-                    all_possible_weeks.append((year, week))
-
-            # Trouver les semaines manquantes
-            weeks_to_check = sorted(set(all_possible_weeks) - existing_weeks)
+                    if (year, week) not in existing_weeks:
+                        weeks_to_check.append((year, week))
 
             st.write(f"**Nombre de semaines en base:** {len(existing_weeks)}")
             st.write(f"**Nombre de semaines manquantes à vérifier:** {len(weeks_to_check)}")
@@ -332,16 +328,14 @@ if st.sidebar.button("Mettre à jour les données"):
 
             new_instructions_total = 0
             for year_to_check, week_num in weeks_to_check:
-                url_to_check = f"https://info.agriculture.gouv.fr/boagri/historique/annee-{year_to_check}/semaine-{week_num}"
-                st.write(f"Vérification de l'URL: {url_to_check}")
-
                 instructions = get_new_instructions(year_to_check, week_num)
-                st.write(f"Instructions récupérées pour année {year_to_check}, semaine {week_num}: {len(instructions)}")
-                new_instructions_total += len(instructions)
+                if instructions:
+                    st.write(f"Instructions récupérées pour année {year_to_check}, semaine {week_num}: {len(instructions)}")
+                    new_instructions_total += len(instructions)
 
-                for title, link, pdf_link, objet, resume in instructions:
-                    if add_instruction_to_db(year_to_check, week_num, title, link, pdf_link, objet, resume):
-                        new_notes_added = True
+                    for title, link, pdf_link, objet, resume in instructions:
+                        if add_instruction_to_db(year_to_check, week_num, title, link, pdf_link, objet, resume):
+                            new_notes_added = True
 
             if new_notes_added:
                 st.success(f"{new_instructions_total} nouvelles instructions ajoutées !")
@@ -350,12 +344,10 @@ if st.sidebar.button("Mettre à jour les données"):
                 data = load_data(db_path)
                 ix = create_whoosh_index(data)
 
-                # Toujours exécuter la logique GitHub
+                # Exécuter la logique GitHub seulement s'il y a de nouvelles instructions
                 github_push_logic()
             else:
                 st.info("Aucune nouvelle instruction trouvée.")
-                # Optionnellement, on peut quand même mettre à jour GitHub si nécessaire
-                # github_push_logic()
 
         except Exception as e:
             st.error(f"Erreur lors de la mise à jour: {e}")
@@ -363,7 +355,7 @@ if st.sidebar.button("Mettre à jour les données"):
         finally:
             conn.close()
 
-# Mise à jour de la fonction github_push_logic pour assurer le bon fonctionnement
+# Mise à jour de la fonction github_push_logic
 def github_push_logic():
     """Envoie les mises à jour vers le dépôt GitHub."""
     github_token = st.secrets["GITHUB_TOKEN"]
@@ -374,17 +366,14 @@ def github_push_logic():
             subprocess.run(["git", "config", "--global", "user.name", "Streamlit App"], check=True)
             subprocess.run(["git", "config", "--global", "user.email", "streamlit.app@example.com"], check=True)
 
-            # Vérifier l'état actuel
-            status_result = subprocess.run(["git", "status", "--porcelain"], check=True, capture_output=True, text=True)
-
             # Ajouter les fichiers modifiés
             subprocess.run(["git", "add", "data/sdssa_instructions.db"], check=True)
             subprocess.run(["git", "add", "indexdir"], check=True)
 
-            # Vérifier à nouveau s'il y a des changements à committer
-            status_after_add = subprocess.run(["git", "status", "--porcelain"], check=True, capture_output=True, text=True)
+            # Vérifier s'il y a des changements à committer
+            status_result = subprocess.run(["git", "status", "--porcelain"], check=True, capture_output=True, text=True)
 
-            if status_after_add.stdout.strip():
+            if status_result.stdout.strip():
                 # Créer le commit avec un message explicite
                 commit_message = f"MAJ auto DB et index via Streamlit App - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
                 subprocess.run(["git", "commit", "-m", commit_message], check=True)
@@ -396,7 +385,6 @@ def github_push_logic():
                 # Pousser les changements
                 push_result = subprocess.run(["git", "push", "origin", "main"], check=True, capture_output=True, text=True)
                 st.success("Publié sur GitHub avec succès!")
-                st.write(push_result.stdout)
             else:
                 st.info("Aucun changement à publier sur GitHub.")
 
