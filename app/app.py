@@ -307,17 +307,19 @@ if st.sidebar.button("Mettre à jour les données"):
             st.write(f"**DEBUG - Current Year:** {current_year}, **Current Week:** {current_week}") # DEBUG
 
             weeks_to_check = []
-            processed_weeks = set() # To avoid duplicates, although logic should prevent them
+            processed_weeks = set() # To avoid duplicates
 
-            if latest_year_db == current_year:
-                st.write("**DEBUG - Condition: latest_year_db == current_year**") # DEBUG
-                start_week = latest_week_db + 1
-                end_week = current_week
-                for week_num in range(start_week, end_week + 1):
-                    if (current_year, week_num) not in processed_weeks: # Check for duplicates
-                        weeks_to_check.append((current_year, week_num))
-                        processed_weeks.add((current_year, week_num))
-                        st.write(f"**DEBUG - Adding week:** {(current_year, week_num)} (Same Year)") # DEBUG
+            if latest_year_db is None: # Handle empty database case first
+                st.write("**DEBUG - Condition: Empty Database**") # DEBUG
+                start_year = 2019 # Or whatever year you want to start checking from for an empty DB
+                for year_to_check in range(start_year, current_year + 1):
+                    start_week_year = 1 if year_to_check != start_year else 1 # Start week 1 for each year
+                    end_week_year = current_week if year_to_check == current_year else 52 # End at current week for current year
+                    for week_num in range(start_week_year, end_week_year + 1):
+                        if (year_to_check, week_num) not in processed_weeks:
+                            weeks_to_check.append((year_to_check, week_num))
+                            processed_weeks.add((year_to_check, week_num))
+                            st.write(f"**DEBUG - Adding week:** {(year_to_check, week_num)} (Empty DB Case)") # DEBUG
 
             elif latest_year_db < current_year:
                 st.write("**DEBUG - Condition: latest_year_db < current_year**") # DEBUG
@@ -325,7 +327,7 @@ if st.sidebar.button("Mettre à jour les données"):
                 for year_to_check in range(latest_year_db + 1, current_year):
                     st.write(f"**DEBUG - Adding full year:** {year_to_check}") # DEBUG
                     for week_num in range(1, 53):
-                        if (year_to_check, week_num) not in processed_weeks: # Check for duplicates
+                        if (year_to_check, week_num) not in processed_weeks:
                             weeks_to_check.append((year_to_check, week_num))
                             processed_weeks.add((year_to_check, week_num))
                             st.write(f"**DEBUG - Adding week:** {(year_to_check, week_num)} (Full Year)") # DEBUG
@@ -333,19 +335,24 @@ if st.sidebar.button("Mettre à jour les données"):
                 # Add weeks for the current year (from week 1 to current_week)
                 st.write(f"**DEBUG - Adding weeks for current year: {current_year}**") # DEBUG
                 for week_num in range(1, current_week + 1):
-                    if (current_year, week_num) not in processed_weeks: # Check for duplicates
-                        weeks_to_check.append((current_year, week_num))
-                        processed_weeks.add((current_year, week_num))
-                        st.write(f"**DEBUG - Adding week:** {(current_year, week_num)} (Current Year)") # DEBUG
-            else: # latest_year_db > current_year (shouldn't happen) or latest_year_db is None (empty DB)
-                st.write("**DEBUG - Condition: latest_year_db >= current_year or None**") # DEBUG
-                #For empty DB or unexpected case, check current year weeks from 1 to current_week
-                for week_num in range(1, current_week + 1):
                     if (current_year, week_num) not in processed_weeks:
                         weeks_to_check.append((current_year, week_num))
                         processed_weeks.add((current_year, week_num))
-                        st.write(f"**DEBUG - Adding week:** {(current_year, week_num)} (Unexpected/Empty DB Case)") # DEBUG
+                        st.write(f"**DEBUG - Adding week:** {(current_year, week_num)} (Current Year)") # DEBUG
 
+
+            elif latest_year_db == current_year:
+                st.write("**DEBUG - Condition: latest_year_db == current_year**") # DEBUG
+                start_week = latest_week_db + 1
+                end_week = current_week
+                for week_num in range(start_week, end_week + 1):
+                    if week_num <= 52 and (current_year, week_num) not in processed_weeks: # Check week_num <= 52 and for duplicates
+                        weeks_to_check.append((current_year, week_num))
+                        processed_weeks.add((current_year, week_num))
+                        st.write(f"**DEBUG - Adding week:** {(current_year, week_num)} (Same Year)") # DEBUG
+            else: # latest_year_db > current_year (Unexpected, or no update needed)
+                 st.write("**DEBUG - Condition: latest_year_db > current_year (No Update Needed)**") # DEBUG
+                 weeks_to_check = [] # No weeks to check if DB is ahead
 
             st.write(f"**Semaines à vérifier:** {weeks_to_check}") # DEBUG: Print weeks to check
 
