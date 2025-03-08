@@ -294,46 +294,41 @@ if st.sidebar.button("Mettre à jour les données"):
         db_path = check_database()
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
-        new_notes_added = False # Flag to track if new notes were added
+        new_notes_added = False  # Flag pour suivre si de nouvelles notes ont été ajoutées
 
         try:
-            cursor.execute("SELECT MAX(year), CAST(MAX(week) AS INTEGER) FROM instructions")
-            latest_year_db, latest_week_db = cursor.fetchone()
-            latest_year_db = latest_year_db if latest_year_db else 2019
-            latest_week_db = latest_week_db if latest_week_db else 0
+            # Récupérer les combinaisons année/semaine déjà en base
+            cursor.execute("SELECT DISTINCT year, week FROM instructions")
+            existing_weeks = set((int(row[0]), int(row[1])) for row in cursor.fetchall())
 
+            # Récupérer l'année et la semaine actuelles
             current_year, current_week, _ = datetime.now().isocalendar()
 
-            st.write(f"**DEBUG - DB Latest Year:** {latest_year_db}, **DB Latest Week:** {latest_week_db} (after CAST to INT)")
-            st.write(f"**DEBUG - Current Year:** {current_year}, **Current Week:** {current_week}")
+            # Définir l'année de départ (2019 ou la plus ancienne en base)
+            start_year = 2019
+            if existing_weeks:
+                start_year = min(year for year, _ in existing_weeks)
 
-            weeks_to_check = []
-            processed_weeks = set()
-            start_year = latest_year_db
-            start_week = latest_week_db + 1
+            st.write(f"**DEBUG - Année de départ:** {start_year}, **Année actuelle:** {current_year}, **Semaine actuelle:** {current_week}")
 
-            if latest_year_db is None:
-                st.write("**DEBUG - Condition: Empty Database - Starting from 2019**")
-                start_year = 2019
-                start_week = 1
-            else:
-                st.write(f"**DEBUG - Starting check from Year:** {start_year}, **Week:** {start_week}")
+            # Générer toutes les combinaisons année/semaine possibles depuis 2019 jusqu'à maintenant
+            all_possible_weeks = []
+            for year in range(start_year, current_year + 1):
+                max_week = 52
+                if year == current_year:
+                    max_week = current_week
 
-            for year_to_check in range(start_year, current_year + 1):
-                start_week_for_year = start_week if year_to_check == start_year else 1
-                end_week_for_year = current_week if year_to_check == current_year else 52
+                for week in range(1, max_week + 1):
+                    all_possible_weeks.append((year, week))
 
-                st.write(f"**DEBUG - Year to check:** {year_to_check}, Start Week: {start_week_for_year}, End Week: {end_week_for_year}") # DEBUG
+            # Trouver les semaines manquantes
+            weeks_to_check = sorted(set(all_possible_weeks) - existing_weeks)
 
-                for week_num in range(start_week_for_year, end_week_for_year + 1):
-                    if (year_to_check, week_num) not in processed_weeks and week_num <= 52:
-                        weeks_to_check.append((year_to_check, week_num))
-                        processed_weeks.add((year_to_check, week_num))
-                        st.write(f"**DEBUG - Adding week to check:** {(year_to_check, week_num)}") # DEBUG
+            st.write(f"**Nombre de semaines en base:** {len(existing_weeks)}")
+            st.write(f"**Nombre de semaines manquantes à vérifier:** {len(weeks_to_check)}")
 
-                start_week = 1  # Reset start_week to 1 for subsequent years, AFTER inner week loop
-
-            st.write(f"**Semaines à vérifier (FINAL):** {weeks_to_check}") # DEBUG: Print weeks to check
+            if len(weeks_to_check) > 10:
+                st.warning(f"Attention: {len(weeks_to_check)} semaines à vérifier. Cela peut prendre du temps.")
 
             new_instructions_total = 0
             for year_to_check, week_num in weeks_to_check:
@@ -344,24 +339,23 @@ if st.sidebar.button("Mettre à jour les données"):
                 st.write(f"Instructions récupérées pour année {year_to_check}, semaine {week_num}: {len(instructions)}")
                 new_instructions_total += len(instructions)
 
-
                 for title, link, pdf_link, objet, resume in instructions:
                     if add_instruction_to_db(year_to_check, week_num, title, link, pdf_link, objet, resume):
                         new_notes_added = True
 
             if new_notes_added:
                 st.success(f"{new_instructions_total} nouvelles instructions ajoutées !")
+
+                # Recharger les données et mettre à jour l'index
+                data = load_data(db_path)
+                ix = create_whoosh_index(data)
+
+                # Toujours exécuter la logique GitHub
+                github_push_logic()
             else:
                 st.info("Aucune nouvelle instruction trouvée.")
-
-            data = load_data(db_path)
-            ix = create_whoosh_index(data)
-
-            if new_notes_added:
-                github_push_logic() # Call GitHub push function
-            elif ix:
-                st.info("Base de données locale mise à jour, mais aucune nouvelle instruction trouvée. Pas de publication GitHub.")
-
+                # Optionnellement, on peut quand même mettre à jour GitHub si nécessaire
+                # github_push_logic()
 
         except Exception as e:
             st.error(f"Erreur lors de la mise à jour: {e}")
@@ -369,30 +363,63 @@ if st.sidebar.button("Mettre à jour les données"):
         finally:
             conn.close()
 
-def github_push_logic(): # Encapsulated GitHub push logic for clarity - No changes here
+# Mise à jour de la fonction github_push_logic pour assurer le bon fonctionnement
+def github_push_logic():
+    """Envoie les mises à jour vers le dépôt GitHub."""
     github_token = st.secrets["GITHUB_TOKEN"]
-    repo_path = "."
 
     try:
         with st.spinner("Publication sur GitHub..."):
-            subprocess.run(["git", "config", "--global", "user.name", "Streamlit App"], check=True, capture_output=True)
-            subprocess.run(["git", "config", "--global", "user.email", "streamlit.app@example.com"], check=True, capture_output=True)
-            subprocess.run(["git", "add", "data/sdssa_instructions.db", "indexdir"], check=True, capture_output=True)
-            commit_message = "MAJ auto DB et index via Streamlit App"
-            subprocess.run(["git", "commit", "-m", commit_message], check=True, capture_output=True)
-            remote_repo = f"https://{github_token}@github.com/M00N69/sdssa-instructions-app.git"
-            subprocess.run(["git", "push", "origin", "main", "--force"], check=True, capture_output=True)
-        st.success("Publié sur GitHub!")
+            # Configuration Git
+            subprocess.run(["git", "config", "--global", "user.name", "Streamlit App"], check=True)
+            subprocess.run(["git", "config", "--global", "user.email", "streamlit.app@example.com"], check=True)
+
+            # Vérifier l'état actuel
+            status_result = subprocess.run(["git", "status", "--porcelain"], check=True, capture_output=True, text=True)
+
+            # Ajouter les fichiers modifiés
+            subprocess.run(["git", "add", "data/sdssa_instructions.db"], check=True)
+            subprocess.run(["git", "add", "indexdir"], check=True)
+
+            # Vérifier à nouveau s'il y a des changements à committer
+            status_after_add = subprocess.run(["git", "status", "--porcelain"], check=True, capture_output=True, text=True)
+
+            if status_after_add.stdout.strip():
+                # Créer le commit avec un message explicite
+                commit_message = f"MAJ auto DB et index via Streamlit App - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                subprocess.run(["git", "commit", "-m", commit_message], check=True)
+
+                # Configurer l'URL du dépôt distant avec le token
+                remote_repo = f"https://{github_token}@github.com/M00N69/sdssa-instructions-app.git"
+                subprocess.run(["git", "remote", "set-url", "origin", remote_repo], check=True)
+
+                # Pousser les changements
+                push_result = subprocess.run(["git", "push", "origin", "main"], check=True, capture_output=True, text=True)
+                st.success("Publié sur GitHub avec succès!")
+                st.write(push_result.stdout)
+            else:
+                st.info("Aucun changement à publier sur GitHub.")
+
     except subprocess.CalledProcessError as e:
-        st.error(f"Erreur publication GitHub: {e.stderr.decode()}")
+        st.error(f"Erreur lors de la publication sur GitHub: {e}")
+        if hasattr(e, 'stderr'):
+            st.error(f"Détails: {e.stderr}")
     except Exception as e:
-        st.error(f"Erreur inattendue publication GitHub: {e}")
+        st.error(f"Erreur inattendue lors de la publication GitHub: {e}")
         st.error(traceback.format_exc())
 
-# --- Mises à jour récentes et Options avancées (sidebar) --- # ... (no changes)
+# --- Mises à jour récentes ---
 st.sidebar.header("Mises à jour récentes")
 if st.sidebar.button("Afficher les mises à jour récentes"):
-    if 'last_updated' not in data.columns: st.error("Colonne 'last_updated' manquante.")
-    else: recent_updates = data.sort_values(by='last_updated', ascending=False).head(10); st.write("Dernières mises à jour :"); st.dataframe(recent_updates[['title', 'link', 'pdf_link', 'objet', 'resume', 'last_updated']])
-with st.sidebar.expander("Options avancées"): auto_update_freq = st.sidebar.selectbox("Fréquence MAJ auto", ["Désactivée", "Quotidienne", "Hebdomadaire", "Mensuelle"]); 
-if auto_update_freq != "Désactivée": st.info(f"MAJ auto: {auto_update_freq}")
+    if 'last_updated' not in data.columns:
+        st.error("Colonne 'last_updated' manquante.")
+    else:
+        recent_updates = data.sort_values(by='last_updated', ascending=False).head(10)
+        st.write("Dernières mises à jour :")
+        st.dataframe(recent_updates[['title', 'link', 'pdf_link', 'objet', 'resume', 'last_updated']])
+
+# --- Options avancées ---
+with st.sidebar.expander("Options avancées"):
+    auto_update_freq = st.selectbox("Fréquence MAJ auto", ["Désactivée", "Quotidienne", "Hebdomadaire", "Mensuelle"])
+    if auto_update_freq != "Désactivée":
+        st.info(f"MAJ auto: {auto_update_freq}")
