@@ -235,14 +235,21 @@ def check_for_new_notes():
         current_year, current_week, _ = datetime.now().isocalendar()
         st.write(f"Année actuelle : {current_year}, Semaine actuelle : {current_week}")
 
-        # **CONDITION DE MISE À JOUR CORRIGÉE**
-        needs_update = False
-        if latest_entry == (None, None) or latest_year < current_year or (latest_year == current_year and latest_week < current_week):
-            needs_update = True
-        else:
-            needs_update = False
+        # **DETAILED DEBUGGING OF "UP-TO-DATE" CONDITION**
+        st.write("--- Début du débogage de la condition 'mise à jour nécessaire' ---")
+        is_db_empty = latest_entry == (None, None)
+        st.write(f"La base de données est vide ? : {is_db_empty}")
+        is_latest_year_less_than_current_year = latest_year < current_year if latest_year is not None else False # Handle None case
+        st.write(f"Dernière année < Année actuelle ? : {is_latest_year_less_than_current_year}")
+        is_same_year_and_latest_week_less_than_current_week = False
+        if latest_year == current_year:
+            is_same_year_and_latest_week_less_than_current_week = latest_week < current_week if latest_week is not None else False # Handle None case
+        st.write(f"Même année et Dernière semaine < Semaine actuelle ? : {is_same_year_and_latest_week_less_than_current_week}")
 
-        st.write(f"Besoin de mise à jour ? : {needs_update}") # Debug print - Is update needed?
+        needs_update = is_db_empty or is_latest_year_less_than_current_year or is_same_year_and_latest_week_less_than_current_week
+        st.write(f"Besoin de mise à jour ? (calculé) : {needs_update}") # Debug print - Calculated needs_update
+        st.write("--- Fin du débogage de la condition 'mise à jour nécessaire' ---")
+
 
         if not needs_update:
             st.info("La base de données est déjà à jour.")
@@ -251,7 +258,8 @@ def check_for_new_notes():
         else:
             st.write("Condition pour 'besoin de mise à jour' est VRAIE. Procéder à la vérification des semaines.") # Debug print
 
-        # Identification des semaines à vérifier pour les nouvelles instructions
+
+        # Identifier les semaines à vérifier
         weeks_to_check = []
         for year in range(latest_year, current_year + 1):
             start_week = latest_week + 1 if year == latest_year else 1
@@ -271,7 +279,7 @@ def check_for_new_notes():
         st.write(f"Semaines à vérifier : {weeks_to_check}") # Affichage des semaines à vérifier
         progress_bar = st.progress(0) # Barre de progression pour le processus de mise à jour
 
-        # Récupération des nouvelles instructions pour chaque semaine à vérifier
+        # Récupérer les nouvelles instructions pour chaque semaine à vérifier
         new_instructions = []
         for i, (year, week) in enumerate(weeks_to_check):
             instructions = get_new_instructions(year, week)
