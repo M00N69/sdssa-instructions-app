@@ -221,29 +221,44 @@ def check_for_new_notes():
             st.error("La table 'instructions' n'existe pas dans la base de données.")
             return
 
-        # Trouver la dernière année et semaine enregistrées dans la base de données
-        cursor.execute("SELECT MAX(year), MAX(week) FROM instructions;")
-        latest_entry = cursor.fetchone()
+        # **CORRECTED DATABASE QUERY to get latest year and week**
+        cursor.execute("SELECT MAX(year) FROM instructions;")
+        latest_year_result = cursor.fetchone()[0]
+        latest_year = latest_year_result if latest_year_result else 2019 # Default start year if DB is empty
 
-        # Si la base de données est vide, commencer la vérification à partir de 2019, semaine 1
-        if latest_entry == (None, None):
-            latest_year, latest_week = 2019, 1
+        cursor.execute("SELECT MAX(week) FROM instructions WHERE year = ?;", (latest_year,))
+        latest_week_result = cursor.fetchone()[0]
+        latest_week = latest_week_result if latest_week_result else 0 # Default start week if no data for latest year
+
+        # **IMMEDIATE LOGGING AFTER DATABASE QUERY - NEW DEBUGGING LINES**
+        st.write("--- Logging IMMEDIATELY after database query ---")
+        st.write(f"Raw latest_year_result from DB: {latest_year_result}") # Log raw result
+        st.write(f"Raw latest_week_result from DB: {latest_week_result}") # Log raw result
+        st.write(f"Calculated latest_year: {latest_year}")         # Log after default handling
+        st.write(f"Calculated latest_week: {latest_week}")         # Log after default handling
+        st.write("--- End of immediate DB query logging ---")
+
+
+        # Si la base est vide, on commence en 2019 semaine 1 (handled by defaults above now)
+        if latest_entry == (None, None): # This check is now redundant but kept for clarity
+            st.write("Base de données initialement vide.")
         else:
-            latest_year, latest_week = latest_entry
+            st.write("Base de données non vide.")
 
-        st.write(f"Dernière année enregistrée (base de données): {latest_year}, Dernière semaine enregistrée (base de données): {latest_week}")
+
+        st.write(f"Dernière année enregistrée (base de données - CORRECTED): {latest_year}, Dernière semaine enregistrée (base de données - CORRECTED): {latest_week}") # Corrected output
         current_year, current_week, _ = datetime.now().isocalendar()
         st.write(f"Année actuelle : {current_year}, Semaine actuelle : {current_week}")
 
-        # **REVISED DETAILED DEBUGGING OF "UP-TO-DATE" CONDITION**
+        # **REVISED DETAILED DEBUGGING OF "UP-TO-DATE" CONDITION - No changes needed here, already good**
         st.write("--- Début du débogage de la condition 'mise à jour nécessaire' (REVISÉ) ---")
-        is_db_empty = latest_entry == (None, None)
+        is_db_empty = latest_entry == (None, None) # Still useful to check if initial state
         st.write(f"La base de données est vide ? : {is_db_empty}")
-        is_latest_year_less_than_current_year = latest_year < current_year if latest_year is not None else False # Handle None case
+        is_latest_year_less_than_current_year = latest_year < current_year if latest_year is not None else False
         st.write(f"Dernière année < Année actuelle ? : {is_latest_year_less_than_current_year}")
         is_same_year_and_latest_week_less_than_current_week = False
         if latest_year == current_year:
-            is_same_year_and_latest_week_less_than_current_week = latest_week < current_week if latest_week is not None else False # Handle None case
+            is_same_year_and_latest_week_less_than_current_week = latest_week < current_week if latest_week is not None else False
         st.write(f"Même année et Dernière semaine < Semaine actuelle ? (CONDITION ORIGINALE): {is_same_year_and_latest_week_less_than_current_week}")
         is_same_year_and_latest_week_GREATER_than_current_week = False # NEW condition check
         if latest_year == current_year:
@@ -252,16 +267,16 @@ def check_for_new_notes():
 
 
         needs_update = is_db_empty or is_latest_year_less_than_current_year or is_same_year_and_latest_week_less_than_current_week or is_same_year_and_latest_week_GREATER_than_current_week # REVISED needs_update condition
-        st.write(f"Besoin de mise à jour ? (calculé REVISÉ) : {needs_update}") # Debug print - Calculated needs_update
+        st.write(f"Besoin de mise à jour ? (calculé REVISÉ) : {needs_update}")
         st.write("--- Fin du débogage de la condition 'mise à jour nécessaire' (REVISÉ) ---")
 
 
         if not needs_update:
             st.info("La base de données est déjà à jour.")
-            st.write("Condition pour 'besoin de mise à jour' est FAUSSE (REVISÉE). Base de données considérée à jour.") # Debug print
+            st.write("Condition pour 'besoin de mise à jour' est FAUSSE (REVISÉE). Base de données considérée à jour.")
             return
         else:
-            st.write("Condition pour 'besoin de mise à jour' est VRAIE (REVISÉE). Procéder à la vérification des semaines.") # Debug print
+            st.write("Condition pour 'besoin de mise à jour' est VRAIE (REVISÉE). Procéder à la vérification des semaines.")
 
 
         # Identifier les semaines à vérifier
@@ -274,13 +289,13 @@ def check_for_new_notes():
             else:
                 end_week = 52
 
-            st.write(f"Pour l'année {year}: start_week={start_week}, end_week={end_week}") # Debug print
+            st.write(f"Pour l'année {year}: start_week={start_week}, end_week={end_week}")
             for week_num in range(start_week, end_week + 1): # Renamed week to week_num to avoid shadowing
                 if year == latest_year and week_num <= latest_week: # Skip already processed weeks
-                    st.write(f"Saut de la semaine {week_num} de l'année {year} (déjà traitée).") # Debug print - Skipping week
+                    st.write(f"Saut de la semaine {week_num} de l'année {year} (déjà traitée).")
                     continue # Skip weeks already in DB
                 weeks_to_check.append((year, week_num))
-                st.write(f"Ajout de la semaine {week_num} de l'année {year} à la liste de vérification.") # Debug print - Adding week
+                st.write(f"Ajout de la semaine {week_num} de l'année {year} à la liste de vérification.")
 
         st.write(f"Semaines à vérifier : {weeks_to_check}") # Affichage des semaines à vérifier
         progress_bar = st.progress(0) # Barre de progression pour le processus de mise à jour
@@ -298,17 +313,17 @@ def check_for_new_notes():
                 if exists == 0:
                     new_instructions.append((year, week, title, link, pdf_link, objet, resume))
 
-            # Mise à jour de la barre de progression
+            # Mettre à jour la barre de progression
             progress = (i + 1) / len(weeks_to_check)
             progress_bar.progress(progress)
 
         st.write(f"{len(new_instructions)} nouvelles instructions trouvées.") # Affichage du nombre total de nouvelles instructions trouvées
 
-        # Ajout des nouvelles instructions à la base de données
+        # Ajouter les nouvelles instructions à la base de données
         added_count = 0
         for instruction in new_instructions:
             year, week, title, link, pdf_link, objet, resume = instruction
-            # Utilisation de la fonction add_instruction_to_db pour ajouter ou mettre à jour l'instruction
+            # Utiliser la fonction add_instruction_to_db pour ajouter ou mettre à jour l'instruction
             if add_instruction_to_db(year, week, title, link, pdf_link, objet, resume):
                 added_count += 1
 
