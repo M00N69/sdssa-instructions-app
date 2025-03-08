@@ -303,13 +303,22 @@ if st.sidebar.button("Mettre à jour les données"):
 
             current_year, current_week, _ = datetime.now().isocalendar()
             weeks_to_check = []
-            for year_to_check in range(latest_year_db, current_year + 1):
-                start_week = latest_week_db + 1 if year_to_check == latest_year_db else 1
-                end_week = current_week if year_to_check == current_year else 52
-                for week_num in range(start_week, end_week + 1):
-                    if year_to_check == latest_year_db and week_num <= latest_week_db:
-                        continue
-                    weeks_to_check.append((year_to_check, week_num))
+
+            if latest_year_db == current_year:
+                start_week = latest_week_db
+                end_week = current_week
+                weeks_to_check.extend([(current_year, week_num) for week_num in range(start_week, end_week + 1) if week_num > latest_week_db]) # Only weeks *after* latest_week_db
+            elif latest_year_db < current_year:
+                # Add weeks for the year after the latest year in DB
+                start_week_next_year = latest_week_db + 1 if latest_year_db else 1 # Start from week after latest if year exists, else week 1
+                weeks_to_check.extend([(latest_year_db, week_num) for week_num in range(start_week_next_year, 53) if latest_year_db is not None]) # Weeks remaining in latest_year_db
+
+                # Add full years between latest_year_db + 1 and current_year - 1
+                for year_to_check in range(latest_year_db + 1 if latest_year_db else current_year, current_year): # Corrected year range
+                    weeks_to_check.extend([(year_to_check, week_num) for week_num in range(1, 53)]) # All weeks for intermediate years
+
+                # Add weeks for the current year
+                weeks_to_check.extend([(current_year, week_num) for week_num in range(1, current_week + 1)]) # All weeks up to current_week
 
             st.write(f"**Semaines à vérifier:** {weeks_to_check}") # DEBUG: Print weeks to check
 
