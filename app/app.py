@@ -88,7 +88,7 @@ def add_instruction_to_db(year, week, title, link, pdf_link, objet, resume):
     try:
         cursor.execute("""
             INSERT OR REPLACE INTO instructions (year, week, title, link, pdf_link, objet, resume, last_updated)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """, (year, week, title, link, pdf_link, objet, resume, datetime.now()))
         conn.commit()
         return True
@@ -350,7 +350,7 @@ if st.sidebar.button("Mettre à jour les données"):
 
             # Récupérer les combinaisons année/semaine déjà en base
             cursor.execute("SELECT DISTINCT year, week FROM instructions")
-            existing_weeks = set((int(row[0]), int(row[1])) for row in cursor.fetchall()]
+            existing_weeks = set((int(row[0]), int(row[1])) for row in cursor.fetchall())
 
             # Filtrer pour ne garder que les semaines manquantes
             weeks_to_check = [(year, week) for year, week in weeks_to_check if (year, week) not in existing_weeks]
