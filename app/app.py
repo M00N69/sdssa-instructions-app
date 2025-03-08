@@ -297,45 +297,87 @@ if st.sidebar.button("Mettre à jour les données"):
         new_notes_added = False  # Flag pour suivre si de nouvelles notes ont été ajoutées
 
         try:
+            # Récupérer la date de la dernière mise à jour
+            cursor.execute("SELECT MAX(last_updated) FROM instructions")
+            last_update_str = cursor.fetchone()[0]
+
+            # Définir une date de départ par défaut (3 mois en arrière)
+            default_start_date = datetime.now() - timedelta(days=90)
+
+            if last_update_str:
+                try:
+                    last_update = datetime.strptime(last_update_str, '%Y-%m-%d %H:%M:%S.%f')
+                    # Si la dernière mise à jour date de plus de 3 mois, utiliser 3 mois en arrière
+                    if (datetime.now() - last_update).days > 90:
+                        last_update = default_start_date
+                except ValueError:
+                    last_update = default_start_date
+            else:
+                # Aucune mise à jour antérieure trouvée, utiliser la date par défaut
+                last_update = default_start_date
+
+            # Récupérer l'année et la semaine actuelles
+            current_date = datetime.now()
+            current_year, current_week, _ = current_date.isocalendar()
+
+            # Récupérer l'année et la semaine de la dernière mise à jour
+            start_year, start_week, _ = last_update.isocalendar()
+
+            st.write(f"**Dernière mise à jour:** {last_update.strftime('%Y-%m-%d')}")
+            st.write(f"**Année/semaine de départ:** {start_year}/{start_week}")
+            st.write(f"**Année/semaine actuelle:** {current_year}/{current_week}")
+
+            # Générer les semaines à vérifier depuis la dernière mise à jour
+            weeks_to_check = []
+
+            # Si même année
+            if start_year == current_year:
+                for week in range(start_week, current_week + 1):
+                    weeks_to_check.append((start_year, week))
+            else:
+                # Ajouter les semaines restantes de l'année de départ
+                for week in range(start_week, 53):  # ISO peut avoir 53 semaines
+                    weeks_to_check.append((start_year, week))
+
+                # Ajouter les années intermédiaires complètes
+                for year in range(start_year + 1, current_year):
+                    for week in range(1, 53):
+                        weeks_to_check.append((year, week))
+
+                # Ajouter les semaines de l'année en cours
+                for week in range(1, current_week + 1):
+                    weeks_to_check.append((current_year, week))
+
             # Récupérer les combinaisons année/semaine déjà en base
             cursor.execute("SELECT DISTINCT year, week FROM instructions")
             existing_weeks = set((int(row[0]), int(row[1])) for row in cursor.fetchall())
 
-            # Récupérer l'année et la semaine actuelles
-            current_year, current_week, _ = datetime.now().isocalendar()
+            # Filtrer pour ne garder que les semaines manquantes
+            weeks_to_check = [(year, week) for year, week in weeks_to_check if (year, week) not in existing_weeks]
 
-            # Définir l'année de départ (2019 ou la plus ancienne en base)
-            start_year = 2019
-
-            st.write(f"**Année actuelle:** {current_year}, **Semaine actuelle:** {current_week}")
-
-            # Générer une liste des semaines à vérifier (seulement les semaines manquantes)
-            weeks_to_check = []
-            for year in range(start_year, current_year + 1):
-                max_week = 52
-                if year == current_year:
-                    max_week = current_week
-
-                for week in range(1, max_week + 1):
-                    if (year, week) not in existing_weeks:
-                        weeks_to_check.append((year, week))
-
-            st.write(f"**Nombre de semaines en base:** {len(existing_weeks)}")
             st.write(f"**Nombre de semaines manquantes à vérifier:** {len(weeks_to_check)}")
 
             if len(weeks_to_check) > 10:
                 st.warning(f"Attention: {len(weeks_to_check)} semaines à vérifier. Cela peut prendre du temps.")
 
-            new_instructions_total = 0
-            for year_to_check, week_num in weeks_to_check:
-                instructions = get_new_instructions(year_to_check, week_num)
-                if instructions:
-                    st.write(f"Instructions récupérées pour année {year_to_check}, semaine {week_num}: {len(instructions)}")
-                    new_instructions_total += len(instructions)
+                # Option pour limiter le nombre de semaines à vérifier
+                limit_weeks = st.checkbox("Limiter à 10 semaines les plus récentes", value=True)
+                if limit_weeks:
+                    weeks_to_check = sorted(weeks_to_check, key=lambda x: (x[0], x[1]), reverse=True)[:10]
+                    st.info(f"Vérification limitée aux 10 semaines les plus récentes")
 
-                    for title, link, pdf_link, objet, resume in instructions:
-                        if add_instruction_to_db(year_to_check, week_num, title, link, pdf_link, objet, resume):
-                            new_notes_added = True
+            new_instructions_total = 0
+            for year_to_check, week_num in sorted(weeks_to_check):
+                with st.status(f"Vérification année {year_to_check}, semaine {week_num}..."):
+                    instructions = get_new_instructions(year_to_check, week_num)
+                    if instructions:
+                        st.write(f"Instructions récupérées: {len(instructions)}")
+                        new_instructions_total += len(instructions)
+
+                        for title, link, pdf_link, objet, resume in instructions:
+                            if add_instruction_to_db(year_to_check, week_num, title, link, pdf_link, objet, resume):
+                                new_notes_added = True
+                    time.sleep(0.5)  # Pause pour éviter de surcharger le serveur
 
             if new_notes_added:
                 st.success(f"{new_instructions_total} nouvelles instructions ajoutées !")
