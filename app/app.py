@@ -309,6 +309,7 @@ if st.sidebar.button("Mettre à jour les données"):
 
             weeks_to_check = []
             processed_weeks = set()
+
             start_year = latest_year_db
             start_week = latest_week_db + 1
 
