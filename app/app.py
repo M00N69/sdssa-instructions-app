@@ -294,95 +294,63 @@ if st.sidebar.button("Mettre à jour les données"):
         db_path = check_database()
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
-        new_notes_added = False # Flag to track if new notes were added
+        new_notes_added = False  # Flag to track if new notes were added
 
         try:
-            cursor.execute("SELECT MAX(year), CAST(MAX(week) AS INTEGER) FROM instructions")
+            cursor.execute("SELECT MAX(year), MAX(week) FROM instructions")
             latest_year_db, latest_week_db = cursor.fetchone()
             latest_year_db = latest_year_db if latest_year_db else 2019
             latest_week_db = latest_week_db if latest_week_db else 0
 
             current_year, current_week, _ = datetime.now().isocalendar()
 
-            st.write(f"**DEBUG - DB Latest Year:** {latest_year_db}, **DB Latest Week:** {latest_week_db} (after CAST to INT)")
-            st.write(f"**DEBUG - Current Year:** {current_year}, **Current Week:** {current_week}")
-
             weeks_to_check = []
             processed_weeks = set()
-            start_year = latest_year_db
-            start_week = latest_week_db + 1
 
+            # If the database is empty, start from 2019
             if latest_year_db is None:
-                st.write("**DEBUG - Condition: Empty Database - Starting from 2019**")
                 start_year = 2019
                 start_week = 1
-            elif latest_year_db == current_year: # **Handle SAME YEAR case FIRST - CORRECTED LOGIC**
-                st.write("**DEBUG - Condition: latest_year_db == current_year**")
-                if latest_week_db >= current_week:
-                    st.write("**DEBUG - No weeks to check in current year - DB up-to-date**")
-                    weeks_to_check = [] # No weeks to check in current year
-                else:
-                    start_week_for_year = latest_week_db + 1 # Correct start week for current year
-                    end_week_for_year = current_week
-                    st.write(f"**DEBUG - Checking weeks in current year {current_year}, from week {start_week_for_year} to {end_week_for_year}**") #DEBUG
-                    for week_num in range(start_week_for_year, end_week_for_year + 1):
-                         if (current_year, week_num) not in processed_weeks and week_num <= 52:
+            else:
+                start_year = latest_year_db
+                start_week = latest_week_db + 1
+
+            # Check weeks in the current year
+            if start_year == current_year:
+                if start_week <= current_week:
+                    for week_num in range(start_week, current_week + 1):
+                        if (current_year, week_num) not in processed_weeks:
                             weeks_to_check.append((current_year, week_num))
                             processed_weeks.add((current_year, week_num))
-                            st.write(f"**DEBUG - Adding week to check:** {(current_year, week_num)} (Same Year)") # DEBUG
 
+            # Check remaining weeks of the latest year in the database
+            elif start_year < current_year:
+                for week_num in range(start_week, 53):
+                    if (start_year, week_num) not in processed_weeks:
+                        weeks_to_check.append((start_year, week_num))
+                        processed_weeks.add((start_year, week_num))
 
-            elif latest_year_db < current_year: # **Then handle LESS THAN CURRENT YEAR**
-                st.write("**DEBUG - Condition: latest_year_db < current_year**")
-                start_week_next_year = latest_week_db + 1 # Start from calculated start_week
-
-                # Remaining weeks of latest_year_db
-                st.write(f"**DEBUG - Checking weeks in year {latest_year_db}, from week {start_week_next_year} to 52**") # DEBUG
-                for week_num in range(start_week_next_year, 53):
-                    if (latest_year_db, week_num) not in processed_weeks:
-                        weeks_to_check.append((latest_year_db, week_num))
-                        processed_weeks.add((latest_year_db, week_num))
-                        st.write(f"DEBUG - Adding week: {(latest_year_db, week_num)} (Remaining Weeks Latest Year)") # DEBUG
-
-
-                # Full years in between
-                for year_to_check in range(latest_year_db + 1, current_year):
-                    st.write(f"**DEBUG - Adding full year:** {year_to_check}") # DEBUG
+                # Check full years between the latest year and the current year
+                for year_to_check in range(start_year + 1, current_year):
                     for week_num in range(1, 53):
                         if (year_to_check, week_num) not in processed_weeks:
                             weeks_to_check.append((year_to_check, week_num))
                             processed_weeks.add((year_to_check, week_num))
-                            st.write(f"**DEBUG - Adding week:** {(year_to_check, week_num)} (Full Year)") # DEBUG
 
-
-                # Weeks of current year
-                st.write(f"**DEBUG - Adding weeks for current year: {current_year}**") # DEBUG
+                # Check weeks of the current year
                 for week_num in range(1, current_week + 1):
                     if (current_year, week_num) not in processed_weeks:
                         weeks_to_check.append((current_year, week_num))
                         processed_weeks.add((current_year, week_num))
-                        st.write(f"**DEBUG - Adding week:** {(current_year, week_num)} (Current Year)") # DEBUG
-            
-            else: # latest_year_db > current_year (Unexpected, or no update needed)
-                st.write("**DEBUG - Condition: latest_year_db > current_year (No Update Needed)**") # DEBUG
-                weeks_to_check = [] # No weeks to check if DB is ahead
-
-
-            st.write(f"**Semaines à vérifier (FINAL):** {weeks_to_check}") # DEBUG: Print weeks to check
 
             new_instructions_total = 0
             for year_to_check, week_num in weeks_to_check:
-                url_to_check = f"https://info.agriculture.gouv.fr/boagri/historique/annee-{year_to_check}/semaine-{week_num}"
-                st.write(f"Vérification de l'URL: {url_to_check}")
-
                 instructions = get_new_instructions(year_to_check, week_num)
                 new_instructions_total += len(instructions)
 
-                st.write(f"Instructions récupérées pour année {year_to_check}, semaine {week_num}: {len(instructions)}")
-
                 for title, link, pdf_link, objet, resume in instructions:
                     if add_instruction_to_db(year_to_check, week_num, title, link, pdf_link, objet, resume):
-                        new_notes_added = True # Set flag to True if any new note is added
+                        new_notes_added = True  # Set flag to True if any new note is added
 
             if new_notes_added:
                 st.success(f"{new_instructions_total} nouvelles instructions ajoutées !")
@@ -392,7 +360,7 @@ if st.sidebar.button("Mettre à jour les données"):
             data = load_data(db_path)
             ix = create_whoosh_index(data)
 
-            if new_notes_added: # Push to GitHub only if new notes were added
+            if new_notes_added:  # Push to GitHub only if new notes were added
                 github_token = st.secrets["GITHUB_TOKEN"]
                 repo_path = "."
 
@@ -411,7 +379,7 @@ if st.sidebar.button("Mettre à jour les données"):
                 except Exception as e:
                     st.error(f"Erreur inattendue publication GitHub: {e}")
                     st.error(traceback.format_exc())
-            elif ix: # Success message if index updated but no new notes for GitHub push
+            elif ix:  # Success message if index updated but no new notes for GitHub push
                 st.info("Base de données locale mise à jour, mais aucune nouvelle instruction trouvée. Pas de publication GitHub.")
 
         except Exception as e:
