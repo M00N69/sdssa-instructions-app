@@ -238,12 +238,11 @@ def check_for_new_notes():
         st.write(f"Calculated latest_week: {latest_week}")         # Log after default handling
         st.write("--- End of immediate DB query logging ---")
 
-
-        # Si la base est vide, on commence en 2019 semaine 1 (handled by defaults above now)
-        if latest_entry == (None, None): # This check is now redundant but kept for clarity
-            st.write("Base de données initialement vide.")
-        else:
-            st.write("Base de données non vide.")
+        # **REMOVED REDUNDANT latest_entry CHECK - THIS IS THE CORRECTION**
+        # if latest_entry == (None, None): # Redundant check REMOVED
+        #     st.write("Base de données initialement vide.")
+        # else:
+        #     st.write("Base de données non vide.")
 
 
         st.write(f"Dernière année enregistrée (base de données - CORRECTED): {latest_year}, Dernière semaine enregistrée (base de données - CORRECTED): {latest_week}") # Corrected output
@@ -252,7 +251,7 @@ def check_for_new_notes():
 
         # **REVISED DETAILED DEBUGGING OF "UP-TO-DATE" CONDITION - No changes needed here, already good**
         st.write("--- Début du débogage de la condition 'mise à jour nécessaire' (REVISÉ) ---")
-        is_db_empty = latest_entry == (None, None) # Still useful to check if initial state
+        is_db_empty = False # latest_entry check removed, DB is not empty if code reaches here
         st.write(f"La base de données est vide ? : {is_db_empty}")
         is_latest_year_less_than_current_year = latest_year < current_year if latest_year is not None else False
         st.write(f"Dernière année < Année actuelle ? : {is_latest_year_less_than_current_year}")
