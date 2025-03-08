@@ -134,6 +134,71 @@ def add_instruction_to_db(year, week, title, link, pdf_link, objet, resume):
     finally:
         conn.close()
 
+# Fonction pour vérifier les nouvelles notes
+def check_for_new_notes():
+    conn = sqlite3.connect('data/sdssa_instructions.db')
+    cursor = conn.cursor()
+    try:
+        # Trouver la dernière semaine enregistrée
+        cursor.execute("SELECT MAX(year), MAX(week) FROM instructions;")
+        latest_entry = cursor.fetchone()
+
+        # Si la base est vide, on commence en 2019 semaine 1
+        latest_year, latest_week = latest_entry if latest_entry != (None, None) else (2019, 1)
+
+        current_year, current_week = datetime.now().isocalendar()[:2]
+
+        # Identifier les semaines à vérifier (uniquement après la dernière semaine en base)
+        weeks_to_check = []
+        for year in range(latest_year, current_year + 1):
+            start_week = latest_week + 1 if year == latest_year else 1
+            end_week = current_week if year == current_year else 52
+            for week in range(start_week, end_week + 1):
+                weeks_to_check.append((year, week))
+
+        st.write(f"Semaines à vérifier : {weeks_to_check}")
+
+        # Récupérer uniquement les nouvelles instructions
+        new_instructions = []
+        for year, week in weeks_to_check:
+            instructions = get_new_instructions(year, week)
+            for title, link, pdf_link, objet, resume in instructions:
+                # Vérifier si cette instruction est déjà en base
+                cursor.execute("SELECT COUNT(*) FROM instructions WHERE title = ?", (title,))
+                exists = cursor.fetchone()[0]
+
+                if exists == 0:
+                    new_instructions.append((year, week, title, link, pdf_link, objet, resume))
+
+        st.write(f"{len(new_instructions)} nouvelles instructions trouvées.")
+
+        # Ajouter les nouvelles instructions à la base
+        added_count = 0
+        for instruction in new_instructions:
+            year, week, title, link, pdf_link, objet, resume = instruction
+            cursor.execute("""
+                INSERT INTO instructions (year, week, title, link, pdf_link, objet, resume, last_updated)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (year, week, title, link, pdf_link, objet, resume, datetime.now()))
+            added_count += 1
+
+        conn.commit()
+
+        if added_count > 0:
+            st.success(f"{added_count} nouvelles instructions ont été ajoutées !")
+        else:
+            st.info("Aucune nouvelle instruction trouvée.")
+
+    except sqlite3.Error as e:
+        st.error(f"Erreur SQLite : {e}")
+    except Exception as e:
+        st.error(f"Erreur inattendue : {e}")
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
 # Vérifier la base de données
 db_path = check_database()
 
@@ -260,77 +325,7 @@ if st.sidebar.button("Télécharger le CSV"):
 
 # Bouton pour mettre à jour les données
 if st.sidebar.button("Mettre à jour les données"):
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-
-    try:
-        # 🔍 Trouver la dernière semaine enregistrée
-        cursor.execute("SELECT MAX(year), MAX(week) FROM instructions;")
-        latest_entry = cursor.fetchone()
-
-        # Si la base est vide, on commence en 2019 semaine 1
-        latest_year, latest_week = latest_entry if latest_entry != (None, None) else (2019, 1)
-
-        current_year, current_week = datetime.now().isocalendar()[:2]
-
-        # 📅 Identifier les semaines à vérifier (uniquement après la dernière semaine en base)
-        weeks_to_check = []
-        for year in range(latest_year, current_year + 1):
-            start_week = latest_week + 1 if year == latest_year else 1
-            end_week = current_week if year == current_year else 52
-            for week in range(start_week, end_week + 1):
-                weeks_to_check.append((year, week))
-
-        st.write(f"📅 Semaines à vérifier : {weeks_to_check}")
-
-        # 📡 Récupérer uniquement les nouvelles instructions
-        new_instructions = []
-        for year, week in weeks_to_check:
-            instructions = get_new_instructions(year, week)
-            for title, link, pdf_link, objet, resume in instructions:
-                # 🔍 Vérifier si cette instruction est déjà en base
-                cursor.execute("SELECT COUNT(*) FROM instructions WHERE title = ?", (title,))
-                exists = cursor.fetchone()[0]
-
-                if exists == 0:
-                    new_instructions.append((year, week, title, link, pdf_link, objet, resume))
-
-        st.write(f"📄 {len(new_instructions)} nouvelles instructions trouvées.")
-
-        # ✅ Ajouter les nouvelles instructions à la base
-        added_count = 0
-        for instruction in new_instructions:
-            year, week, title, link, pdf_link, objet, resume = instruction
-            cursor.execute("""
-                INSERT INTO instructions (year, week, title, link, pdf_link, objet, resume, last_updated)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, (year, week, title, link, pdf_link, objet, resume, datetime.now()))
-            added_count += 1
-
-        conn.commit()
-
-        if added_count > 0:
-            st.success(f"{added_count} nouvelles instructions ont été ajoutées !")
-        else:
-            st.info("Aucune nouvelle instruction trouvée.")
-
-    except sqlite3.Error as e:
-        st.error(f"Erreur SQLite : {e}")
-    except Exception as e:
-        st.error(f"Erreur inattendue : {e}")
-    finally:
-        if cursor:
-            try:
-                cursor.close()
-                st.write("✅ Connexion fermée proprement.")
-            except sqlite3.ProgrammingError:
-                st.write("⚠️ Impossible de fermer le curseur, il est déjà fermé.")
-        if conn:
-            try:
-                conn.close()
-                st.write("✅ Connexion fermée proprement.")
-            except sqlite3.ProgrammingError:
-                st.write("⚠️ La connexion était déjà fermée.")
+    check_for_new_notes()
 
 # Afficher les mises à jour récentes
 st.sidebar.header("Mises à jour récentes")
@@ -341,5 +336,4 @@ if st.sidebar.button("Afficher les mises à jour récentes"):
         recent_updates = data.sort_values(by='last_updated', ascending=False).head(10)
         st.write("Dernières mises à jour :")
         st.dataframe(recent_updates[['title', 'link', 'pdf_link', 'objet', 'resume', 'last_updated']])
-
 
