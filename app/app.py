@@ -324,7 +324,7 @@ if st.sidebar.button("Mettre à jour les données"):
                 end_week_for_year = current_week if year_to_check == current_year else 52
 
                 for week_num in range(start_week_for_year, end_week_for_year + 1):
-                    if (year_to_check, week_num) not in processed_weeks:
+                    if (year_to_check, week_num) not in processed_weeks and week_num <=52: # **ADDED week_num <= 52 check here**
                         weeks_to_check.append((year_to_check, week_num))
                         processed_weeks.add((year_to_check, week_num))
                         st.write(f"**DEBUG - Adding week to check:** {(year_to_check, week_num)}")
