@@ -142,17 +142,21 @@ def check_for_new_notes():
         # Trouver la dernière semaine enregistrée
         cursor.execute("SELECT MAX(year), MAX(week) FROM instructions;")
         latest_entry = cursor.fetchone()
+        print(f"Dernière entrée dans la base de données : {latest_entry}")
 
         # Si la base est vide, on commence en 2019 semaine 1
         latest_year, latest_week = latest_entry if latest_entry != (None, None) else (2019, 1)
+        print(f"Dernière année : {latest_year}, Dernière semaine : {latest_week}")
 
         current_year, current_week, _ = datetime.now().isocalendar()
+        print(f"Année actuelle : {current_year}, Semaine actuelle : {current_week}")
 
         # Identifier les semaines à vérifier (uniquement après la dernière semaine en base)
         weeks_to_check = []
         for year in range(latest_year, current_year + 1):
             start_week = latest_week + 1 if year == latest_year else 1
             end_week = current_week if year == current_year else 53  # Utiliser 53 pour inclure la dernière semaine
+            print(f"Année {year} : Vérification des semaines {start_week} à {end_week}")
             for week in range(start_week, end_week + 1):
                 weeks_to_check.append((year, week))
 
