@@ -307,27 +307,45 @@ if st.sidebar.button("Mettre à jour les données"):
             st.write(f"**DEBUG - Current Year:** {current_year}, **Current Week:** {current_week}") # DEBUG
 
             weeks_to_check = []
+            processed_weeks = set() # To avoid duplicates, although logic should prevent them
 
             if latest_year_db == current_year:
                 st.write("**DEBUG - Condition: latest_year_db == current_year**") # DEBUG
-                start_week = latest_week_db
+                start_week = latest_week_db + 1
                 end_week = current_week
-                weeks_to_check.extend([(current_year, week_num) for week_num in range(start_week, end_week + 1) if week_num > latest_week_db]) # Only weeks *after* latest_week_db
+                for week_num in range(start_week, end_week + 1):
+                    if (current_year, week_num) not in processed_weeks: # Check for duplicates
+                        weeks_to_check.append((current_year, week_num))
+                        processed_weeks.add((current_year, week_num))
+                        st.write(f"**DEBUG - Adding week:** {(current_year, week_num)} (Same Year)") # DEBUG
+
             elif latest_year_db < current_year:
                 st.write("**DEBUG - Condition: latest_year_db < current_year**") # DEBUG
-                # Add weeks for the year after the latest year in DB
-                start_week_next_year = latest_week_db + 1 if latest_year_db else 1 # Start from week after latest if year exists, else week 1
-                weeks_to_check.extend([(latest_year_db, week_num) for week_num in range(start_week_next_year, 53) if latest_year_db is not None]) # Weeks remaining in latest_year_db
-
-                # Add full years between latest_year_db + 1 and current_year - 1
-                for year_to_check in range(latest_year_db + 1 if latest_year_db else current_year, current_year): # Corrected year range
+                # Add weeks for years between latest_year_db + 1 and current_year (exclusive of current_year)
+                for year_to_check in range(latest_year_db + 1, current_year):
                     st.write(f"**DEBUG - Adding full year:** {year_to_check}") # DEBUG
-                    weeks_to_check.extend([(year_to_check, week_num) for week_num in range(1, 53)]) # All weeks for intermediate years
+                    for week_num in range(1, 53):
+                        if (year_to_check, week_num) not in processed_weeks: # Check for duplicates
+                            weeks_to_check.append((year_to_check, week_num))
+                            processed_weeks.add((year_to_check, week_num))
+                            st.write(f"**DEBUG - Adding week:** {(year_to_check, week_num)} (Full Year)") # DEBUG
 
-                # Add weeks for the current year
-                weeks_to_check.extend([(current_year, week_num) for week_num in range(1, current_week + 1)]) # All weeks up to current_week
-            else: # latest_year_db > current_year (shouldn't happen, but for completeness)
-                st.write("**DEBUG - Condition: latest_year_db > current_year (Unexpected)**") # DEBUG
+                # Add weeks for the current year (from week 1 to current_week)
+                st.write(f"**DEBUG - Adding weeks for current year: {current_year}**") # DEBUG
+                for week_num in range(1, current_week + 1):
+                    if (current_year, week_num) not in processed_weeks: # Check for duplicates
+                        weeks_to_check.append((current_year, week_num))
+                        processed_weeks.add((current_year, week_num))
+                        st.write(f"**DEBUG - Adding week:** {(current_year, week_num)} (Current Year)") # DEBUG
+            else: # latest_year_db > current_year (shouldn't happen) or latest_year_db is None (empty DB)
+                st.write("**DEBUG - Condition: latest_year_db >= current_year or None**") # DEBUG
+                #For empty DB or unexpected case, check current year weeks from 1 to current_week
+                for week_num in range(1, current_week + 1):
+                    if (current_year, week_num) not in processed_weeks:
+                        weeks_to_check.append((current_year, week_num))
+                        processed_weeks.add((current_year, week_num))
+                        st.write(f"**DEBUG - Adding week:** {(current_year, week_num)} (Unexpected/Empty DB Case)") # DEBUG
+
 
             st.write(f"**Semaines à vérifier:** {weeks_to_check}") # DEBUG: Print weeks to check
 
