@@ -535,13 +535,10 @@ def update_database(weeks_limit=10):
             # Récupérer l'année et la semaine de la dernière mise à jour
             start_year, start_week, _ = last_update.isocalendar()
             
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.info(f"📅 Dernière mise à jour: {last_update.strftime('%Y-%m-%d')}")
-            with col2:
-                st.info(f"🔍 Année/semaine de départ: {start_year}/{start_week}")
-            with col3:
-                st.info(f"📌 Année/semaine actuelle: {current_year}/{current_week}")
+            # Afficher les informations de mise à jour en dehors d'une structure de colonnes
+            st.info(f"📅 Dernière mise à jour: {last_update.strftime('%Y-%m-%d')}")
+            st.info(f"🔍 Année/semaine de départ: {start_year}/{start_week}")
+            st.info(f"📌 Année/semaine actuelle: {current_year}/{current_week}")
             
             # Générer les semaines à vérifier depuis la dernière mise à jour
             weeks_to_check = []
@@ -689,7 +686,7 @@ if not os.path.exists("data/sdssa_instructions.db"):
     
     if st.button("📥 Télécharger la base de données depuis GitHub"):
         download_db_from_github(force=True)
-        st.experimental_rerun()
+        st.rerun()
     st.stop()
 
 # Charger les données
@@ -993,7 +990,7 @@ with tab3:
                         
                         # Recharger les données
                         st.cache_data.clear()
-                        st.experimental_rerun()
+                        st.rerun()
                     except Exception as e:
                         st.error(f"❌ Erreur lors de la restauration: {e}")
     else:
