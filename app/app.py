@@ -256,68 +256,6 @@ def download_db_from_github(force=False):
         st.error(f"❌ Erreur lors du téléchargement de la base de données: {e}")
         st.error(traceback.format_exc())
         return False
-                # Obtenir la date de dernière modification depuis les en-têtes
-                github_last_modified = headers_response.headers.get('last-modified')
-                
-                if github_last_modified:
-                    github_date = datetime.strptime(github_last_modified, '%a, %d %b %Y %H:%M:%S %Z')
-                    st.session_state.db_last_checked = datetime.now()
-                    
-                    # Télécharger uniquement si la version GitHub est plus récente ou si aucune version locale n'existe
-                    download_needed = force or not local_modification_time or github_date > local_modification_date
-                    
-                    if download_needed:
-                        with st.status("🔄 Téléchargement de la base de données..."):
-                                                            # Télécharger le fichier
-                            response = requests.get(github_raw_url, headers=headers, allow_redirects=True)
-                            if response.status_code == 200:
-                                # Calculer le hash de la nouvelle version
-                                new_content = response.content
-                                new_hash = hashlib.md5(new_content).hexdigest()
-                                
-                                # Vérifier si le contenu a réellement changé
-                                if force or not local_hash or new_hash != local_hash:
-                                    # Créer une sauvegarde datée
-                                    if os.path.exists(local_db_path):
-                                        backup_date = datetime.now().strftime('%Y%m%d_%H%M%S')
-                                        backup_path = f"backups/sdssa_instructions_{backup_date}.db"
-                                        shutil.copy2(local_db_path, backup_path)
-                                        st.write(f"✅ Sauvegarde créée: {backup_path}")
-                                    
-                                    # Écrire la nouvelle version
-                                    with open(local_db_path, 'wb') as f:
-                                        f.write(new_content)
-                                    
-                                    st.success("✅ Base de données mise à jour avec succès!")
-                                    st.session_state.is_db_updated = True
-                                    
-                                    # Limiter le nombre de sauvegardes (garder les 5 plus récentes)
-                                    backups = sorted(glob.glob("backups/sdssa_instructions_*.db"))
-                                    if len(backups) > 5:
-                                        for old_backup in backups[:-5]:
-                                            os.remove(old_backup)
-                                    
-                                    return True
-                                else:
-                                    st.info("📌 Le contenu de la base de données est identique - aucune mise à jour nécessaire")
-                                    return True
-                            else:
-                                st.error(f"❌ Erreur lors du téléchargement: {response.status_code}")
-                                return False
-                    else:
-                        st.success("✅ La base de données locale est à jour!")
-                        return True
-                else:
-                    st.warning("⚠️ Impossible de déterminer la date de dernière modification sur GitHub")
-                    return False
-            else:
-                st.error(f"❌ Erreur lors de la vérification de la version GitHub: {headers_response.status_code}")
-                return False
-                
-    except Exception as e:
-        st.error(f"❌ Erreur lors du téléchargement de la base de données: {e}")
-        st.error(traceback.format_exc())
-        return False
 
 # --- Fonctions de gestion de la base de données SQLite ---
 def get_db_connection():
@@ -856,41 +794,43 @@ with tab1:
         )
         st.markdown("</div>", unsafe_allow_html=True)
             
-            # Sélection d'une instruction pour voir les détails
-            st.markdown("<h3 class='sub-header'>Détails de l'instruction</h3>", unsafe_allow_html=True)
-            selected_title = st.selectbox("Sélectionner une instruction", options=results['title'].tolist())
+    # Sélection d'une instruction pour voir les détails
+    if 'search_results' in st.session_state and st.session_state.search_results is not None and not st.session_state.search_results.empty:
+        results = st.session_state.search_results
+        st.markdown("<h3 class='sub-header'>Détails de l'instruction</h3>", unsafe_allow_html=True)
+        selected_title = st.selectbox("Sélectionner une instruction", options=results['title'].tolist())
+        
+        if selected_title:
+            st.session_state.selected_instruction = selected_title
+            instruction = results[results['title'] == selected_title].iloc[0]
             
-            if selected_title:
-                st.session_state.selected_instruction = selected_title
-                instruction = results[results['title'] == selected_title].iloc[0]
+            # Affichage détaillé de l'instruction
+            st.markdown("<div class='card'>", unsafe_allow_html=True)
+            
+            col1, col2 = st.columns([2, 1])
+            
+            with col1:
+                st.markdown(f"<h3>{instruction['title']}</h3>", unsafe_allow_html=True)
+                st.markdown(f"<p><strong>Année:</strong> {instruction['year']} | <strong>Semaine:</strong> {instruction['week']}</p>", unsafe_allow_html=True)
                 
-                # Affichage détaillé de l'instruction
-                st.markdown("<div class='card'>", unsafe_allow_html=True)
-                
-                col1, col2 = st.columns([2, 1])
-                
-                with col1:
-                    st.markdown(f"<h3>{instruction['title']}</h3>", unsafe_allow_html=True)
-                    st.markdown(f"<p><strong>Année:</strong> {instruction['year']} | <strong>Semaine:</strong> {instruction['week']}</p>", unsafe_allow_html=True)
-                    
-                with col2:
-                    st.markdown(f"<p><a href='{instruction['link']}' target='_blank'>🔗 Voir sur le site</a></p>", unsafe_allow_html=True)
-                    st.markdown(f"<p><a href='{instruction['pdf_link']}' target='_blank'>📄 Télécharger le PDF</a></p>", unsafe_allow_html=True)
-                
-                st.markdown("<hr>", unsafe_allow_html=True)
-                st.markdown(f"<p><strong>Objet:</strong> {instruction['objet']}</p>", unsafe_allow_html=True)
-                st.markdown(f"<p><strong>Résumé:</strong> {instruction['resume']}</p>", unsafe_allow_html=True)
-                
-                st.markdown("</div>", unsafe_allow_html=True)
-                
-                # Bouton pour télécharger cette instruction
-                if st.download_button(
-                    "📥 Télécharger cette instruction (CSV)",
-                    data=results[results['title'] == selected_title].to_csv(index=False).encode('utf-8'),
-                    file_name=f"instruction_{instruction['year']}_{instruction['week']}.csv",
-                    mime="text/csv"
-                ):
-                    st.success("✅ Instruction téléchargée!")
+            with col2:
+                st.markdown(f"<p><a href='{instruction['link']}' target='_blank'>🔗 Voir sur le site</a></p>", unsafe_allow_html=True)
+                st.markdown(f"<p><a href='{instruction['pdf_link']}' target='_blank'>📄 Télécharger le PDF</a></p>", unsafe_allow_html=True)
+            
+            st.markdown("<hr>", unsafe_allow_html=True)
+            st.markdown(f"<p><strong>Objet:</strong> {instruction['objet']}</p>", unsafe_allow_html=True)
+            st.markdown(f"<p><strong>Résumé:</strong> {instruction['resume']}</p>", unsafe_allow_html=True)
+            
+            st.markdown("</div>", unsafe_allow_html=True)
+            
+            # Bouton pour télécharger cette instruction
+            if st.download_button(
+                "📥 Télécharger cette instruction (CSV)",
+                data=results[results['title'] == selected_title].to_csv(index=False).encode('utf-8'),
+                file_name=f"instruction_{instruction['year']}_{instruction['week']}.csv",
+                mime="text/csv"
+            ):
+                st.success("✅ Instruction téléchargée!")
 
 with tab2:
     st.markdown("<h2 class='sub-header'>Visualisation des données</h2>", unsafe_allow_html=True)
