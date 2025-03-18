@@ -189,10 +189,11 @@ os.makedirs('backups', exist_ok=True)
 # --- Fonction pour télécharger la base de données depuis GitHub ---
 def download_db_from_github(force=False):
     """Télécharge la base de données depuis GitHub si une version plus récente est disponible."""
-    github_raw_url = "https://github.com/M00N69/sdssa-instructions-app/raw/main/data/sdssa_instructions.db"
+    # URL directe vers le fichier dans le dépôt GitHub
+    github_raw_url = "https://raw.githubusercontent.com/M00N69/sdssa-instructions-app/main/data/sdssa_instructions.db"
     local_db_path = "data/sdssa_instructions.db"
     
-    # Définir les headers avec un User-Agent pour éviter les redirections 302
+    # Définir les headers avec un User-Agent
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
     }
@@ -212,11 +213,49 @@ def download_db_from_github(force=False):
             with st.status(f"📅 Base de données locale du {local_modification_date.strftime('%d/%m/%Y à %H:%M')}"):
                 st.write("Vérification des mises à jour...")
         
-        # Vérifier la version sur GitHub (en utilisant les en-têtes)
-        with st.spinner("Vérification de la version GitHub..."):
-            headers_response = requests.head(github_raw_url, headers=headers, allow_redirects=True)
+        # Télécharger directement le fichier sans vérifier les en-têtes (plus fiable)
+        with st.spinner("Téléchargement de la base de données..."):
+            response = requests.get(github_raw_url, headers=headers, allow_redirects=True, timeout=30)
             
-            if headers_response.status_code == 200:
+            if response.status_code == 200:
+                # Calculer le hash de la nouvelle version
+                new_content = response.content
+                new_hash = hashlib.md5(new_content).hexdigest()
+                
+                # Vérifier si le contenu a réellement changé ou si le téléchargement est forcé
+                if force or not local_hash or new_hash != local_hash:
+                    # Créer une sauvegarde datée
+                    if os.path.exists(local_db_path):
+                        backup_date = datetime.now().strftime('%Y%m%d_%H%M%S')
+                        backup_path = f"backups/sdssa_instructions_{backup_date}.db"
+                        shutil.copy2(local_db_path, backup_path)
+                        st.write(f"✅ Sauvegarde créée: {backup_path}")
+                    
+                    # Écrire la nouvelle version
+                    with open(local_db_path, 'wb') as f:
+                        f.write(new_content)
+                    
+                    st.success("✅ Base de données mise à jour avec succès!")
+                    st.session_state.is_db_updated = True
+                    
+                    # Limiter le nombre de sauvegardes (garder les 5 plus récentes)
+                    backups = sorted(glob.glob("backups/sdssa_instructions_*.db"))
+                    if len(backups) > 5:
+                        for old_backup in backups[:-5]:
+                            os.remove(old_backup)
+                    
+                    return True
+                else:
+                    st.info("📌 Le contenu de la base de données est identique - aucune mise à jour nécessaire")
+                    return True
+            else:
+                st.error(f"❌ Erreur lors du téléchargement: {response.status_code}")
+                return False
+                
+    except Exception as e:
+        st.error(f"❌ Erreur lors du téléchargement de la base de données: {e}")
+        st.error(traceback.format_exc())
+        return False
                 # Obtenir la date de dernière modification depuis les en-têtes
                 github_last_modified = headers_response.headers.get('last-modified')
                 
@@ -229,8 +268,8 @@ def download_db_from_github(force=False):
                     
                     if download_needed:
                         with st.status("🔄 Téléchargement de la base de données..."):
-                            # Télécharger le fichier
-                            response = requests.get(github_raw_url)
+                                                            # Télécharger le fichier
+                            response = requests.get(github_raw_url, headers=headers, allow_redirects=True)
                             if response.status_code == 200:
                                 # Calculer le hash de la nouvelle version
                                 new_content = response.content
@@ -777,7 +816,7 @@ with tab1:
                 st.session_state.search_results = filtered_data
     
     # Afficher les résultats de recherche
-    if st.session_state.search_results is not None:
+    if 'search_results' in st.session_state and st.session_state.search_results is not None:
         results = st.session_state.search_results
         
         if results.empty:
@@ -801,6 +840,21 @@ with tab1:
                 hide_index=True
             )
             st.markdown("</div>", unsafe_allow_html=True)
+    else:
+        # Afficher toutes les données par défaut si aucune recherche n'a été effectuée
+        display_data = format_data_for_display(data)
+        st.markdown("<div class='card'>", unsafe_allow_html=True)
+        st.dataframe(
+            display_data[['affichage_date', 'title', 'objet_court']],
+            column_config={
+                "affichage_date": "Date",
+                "title": "Titre",
+                "objet_court": "Objet"
+            },
+            use_container_width=True,
+            hide_index=True
+        )
+        st.markdown("</div>", unsafe_allow_html=True)
             
             # Sélection d'une instruction pour voir les détails
             st.markdown("<h3 class='sub-header'>Détails de l'instruction</h3>", unsafe_allow_html=True)
