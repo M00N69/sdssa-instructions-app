@@ -192,6 +192,11 @@ def download_db_from_github(force=False):
     github_raw_url = "https://github.com/M00N69/sdssa-instructions-app/raw/main/data/sdssa_instructions.db"
     local_db_path = "data/sdssa_instructions.db"
     
+    # Définir les headers avec un User-Agent pour éviter les redirections 302
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    }
+    
     try:
         # Vérifier si le fichier existe localement et obtenir sa date de modification
         local_modification_time = None
@@ -209,7 +214,7 @@ def download_db_from_github(force=False):
         
         # Vérifier la version sur GitHub (en utilisant les en-têtes)
         with st.spinner("Vérification de la version GitHub..."):
-            headers_response = requests.head(github_raw_url)
+            headers_response = requests.head(github_raw_url, headers=headers, allow_redirects=True)
             
             if headers_response.status_code == 200:
                 # Obtenir la date de dernière modification depuis les en-têtes
