@@ -172,7 +172,7 @@ def initialize_nltk():
         nltk.data.find('tokenizers/punkt')
     except LookupError:
         nltk.download('punkt')
-    
+
     try:
         nltk.data.find('corpora/wordnet')
     except LookupError:
@@ -191,7 +191,7 @@ def download_db_from_github(force=False):
     """Télécharge la base de données depuis GitHub si une version plus récente est disponible."""
     github_raw_url = "https://github.com/M00N69/sdssa-instructions-app/raw/main/data/sdssa_instructions.db"
     local_db_path = "data/sdssa_instructions.db"
-    
+
     try:
         # Vérifier si le fichier existe localement et obtenir sa date de modification
         local_modification_time = None
@@ -199,29 +199,29 @@ def download_db_from_github(force=False):
         if os.path.exists(local_db_path):
             local_modification_time = os.path.getmtime(local_db_path)
             local_modification_date = datetime.fromtimestamp(local_modification_time)
-            
+
             # Calculer le hash de la base locale pour détecter les changements
             with open(local_db_path, 'rb') as f:
                 local_hash = hashlib.md5(f.read()).hexdigest()
-            
+
             with st.status(f"📅 Base de données locale du {local_modification_date.strftime('%d/%m/%Y à %H:%M')}"):
                 st.write("Vérification des mises à jour...")
-        
+
         # Vérifier la version sur GitHub (en utilisant les en-têtes)
         with st.spinner("Vérification de la version GitHub..."):
             headers_response = requests.head(github_raw_url)
-            
+
             if headers_response.status_code == 200:
                 # Obtenir la date de dernière modification depuis les en-têtes
                 github_last_modified = headers_response.headers.get('last-modified')
-                
+
                 if github_last_modified:
                     github_date = datetime.strptime(github_last_modified, '%a, %d %b %Y %H:%M:%S %Z')
                     st.session_state.db_last_checked = datetime.now()
-                    
+
                     # Télécharger uniquement si la version GitHub est plus récente ou si aucune version locale n'existe
                     download_needed = force or not local_modification_time or github_date > local_modification_date
-                    
+
                     if download_needed:
                         with st.status("🔄 Téléchargement de la base de données..."):
                             # Télécharger le fichier
@@ -230,7 +230,7 @@ def download_db_from_github(force=False):
                                 # Calculer le hash de la nouvelle version
                                 new_content = response.content
                                 new_hash = hashlib.md5(new_content).hexdigest()
-                                
+
                                 # Vérifier si le contenu a réellement changé
                                 if force or not local_hash or new_hash != local_hash:
                                     # Créer une sauvegarde datée
@@ -239,20 +239,20 @@ def download_db_from_github(force=False):
                                         backup_path = f"backups/sdssa_instructions_{backup_date}.db"
                                         shutil.copy2(local_db_path, backup_path)
                                         st.write(f"✅ Sauvegarde créée: {backup_path}")
-                                    
+
                                     # Écrire la nouvelle version
                                     with open(local_db_path, 'wb') as f:
                                         f.write(new_content)
-                                    
+
                                     st.success("✅ Base de données mise à jour avec succès!")
                                     st.session_state.is_db_updated = True
-                                    
+
                                     # Limiter le nombre de sauvegardes (garder les 5 plus récentes)
                                     backups = sorted(glob.glob("backups/sdssa_instructions_*.db"))
                                     if len(backups) > 5:
                                         for old_backup in backups[:-5]:
                                             os.remove(old_backup)
-                                    
+
                                     return True
                                 else:
                                     st.info("📌 Le contenu de la base de données est identique - aucune mise à jour nécessaire")
@@ -269,7 +269,7 @@ def download_db_from_github(force=False):
             else:
                 st.error(f"❌ Erreur lors de la vérification de la version GitHub: {headers_response.status_code}")
                 return False
-                
+
     except Exception as e:
         st.error(f"❌ Erreur lors du téléchargement de la base de données: {e}")
         st.error(traceback.format_exc())
@@ -282,7 +282,7 @@ def get_db_connection():
     if not os.path.exists(db_path):
         st.error("❌ Base de données non trouvée! Veuillez télécharger la base de données depuis GitHub.")
         st.stop()
-        
+
     return sqlite3.connect(db_path)
 
 def ensure_database_structure():
@@ -304,14 +304,14 @@ def ensure_database_structure():
                 )
             """)
             conn.commit()
-            
+
             # Vérifier si la colonne last_updated existe
             cursor.execute("PRAGMA table_info(instructions)")
             columns = [column[1] for column in cursor.fetchall()]
             if 'last_updated' not in columns:
                 cursor.execute("ALTER TABLE instructions ADD COLUMN last_updated TIMESTAMP")
                 conn.commit()
-                
+
             return True
         except sqlite3.Error as e:
             st.error(f"❌ Erreur base de données: {e}")
@@ -326,7 +326,7 @@ def load_data():
             query = "SELECT * FROM instructions"
             df = pd.read_sql_query(query, conn)
             return df
-    
+
     try:
         return _load_data()
     except Exception as e:
@@ -369,7 +369,7 @@ def get_new_instructions(year, week):
                 instructions = soup.find_all('a', href=True)
                 sdssa_instructions = [a for a in instructions if 'SDSSA' in a.text]
                 new_instructions = []
-                
+
                 progress_bar = st.progress(0.0)
                 for idx, instruction in enumerate(sdssa_instructions):
                     href = instruction['href']
@@ -377,7 +377,7 @@ def get_new_instructions(year, week):
                         href = f"https://info.agriculture.gouv.fr{href}"
                     link = href
                     pdf_link = link.replace("/detail", "/telechargement")
-                    
+
                     try:
                         detail_response = requests.get(link, timeout=15)
                         if detail_response.status_code == 200:
@@ -390,12 +390,12 @@ def get_new_instructions(year, week):
                     except requests.RequestException as e:
                         st.warning(f"⚠️ Erreur détails {link}: {e}")
                         new_instructions.append((instruction.text, link, pdf_link, "OBJET : Inconnu", "RESUME : Inconnu"))
-                    
+
                     # Mettre à jour la barre de progression
                     progress_bar.progress((idx + 1) / len(sdssa_instructions))
                     # Pause pour éviter de surcharger le serveur
                     time.sleep(0.5)
-                
+
                 return new_instructions
             else:
                 st.warning(f"⚠️ Impossible de récupérer année {year} semaine {week} (Status: {response.status_code})")
@@ -414,19 +414,19 @@ def create_whoosh_index(df):
                     resume=TEXT(stored=True, analyzer=analyzer),
                     content=TEXT(analyzer=analyzer))
     index_dir = "indexdir"
-    
+
     try:
         if not exists_in(index_dir) or len(os.listdir(index_dir)) == 0:
             ix = create_in(index_dir, schema)
             with st.spinner("Création index Whoosh..."):
                 writer = ix.writer()
                 for index, row in df.iterrows():
-                    writer.add_document(title=row['title'], objet=row['objet'], resume=row['resume'], 
+                    writer.add_document(title=row['title'], objet=row['objet'], resume=row['resume'],
                                        content=f"{row['title']} {row['objet']} {row['resume']}")
                 writer.commit()
         else:
             ix = open_dir(index_dir)
-            
+
         return ix
     except LockError as e:
         st.error(f"❌ Erreur verrouillage index Whoosh: {e}")
@@ -446,7 +446,7 @@ def update_whoosh_index(df):
         # Supprimer l'ancien index
         for f in os.listdir(index_dir):
             os.remove(os.path.join(index_dir, f))
-    
+
     # Recréer l'index
     create_whoosh_index(df)
 
@@ -470,24 +470,24 @@ def search_instructions(query, ix, data):
     """Effectue une recherche avancée dans l'index Whoosh."""
     if not query or not ix:
         return data
-    
+
     normalized_search = normalize_text(query)
     synonyms = set()
     for word in word_tokenize(normalized_search):
         synonyms.update(get_synonyms(word))
-    
+
     # Ajouter les termes de recherche originaux
     synonyms.add(normalized_search)
-    
+
     # Créer une requête combinée avec OR
     query_string = " OR ".join([f"content:{syn}" for syn in synonyms])
-    
+
     try:
         with ix.searcher() as searcher:
             query_parser = QueryParser("content", ix.schema)
             parsed_query = query_parser.parse(query_string)
             results = searcher.search(parsed_query, limit=None)
-            
+
             if len(results) > 0:
                 filtered_data = pd.DataFrame([{
                     'id': data.loc[data['title'] == hit['title'], 'id'].values[0] if not data.loc[data['title'] == hit['title'], 'id'].empty else None,
@@ -501,11 +501,11 @@ def search_instructions(query, ix, data):
                     'last_updated': data.loc[data['title'] == hit['title'], 'last_updated'].values[0] if not data.loc[data['title'] == hit['title'], 'last_updated'].empty else None,
                     'score': hit.score,
                 } for hit in results if not data.loc[data['title'] == hit['title']].empty])
-                
+
                 # Trier par score de pertinence
                 if not filtered_data.empty:
                     filtered_data = filtered_data.sort_values(by='score', ascending=False)
-                
+
                 return filtered_data
             else:
                 return pd.DataFrame(columns=data.columns)
@@ -521,19 +521,19 @@ def update_database(weeks_limit=10):
     if not os.path.exists(db_path):
         st.error("❌ Base de données non trouvée! Veuillez d'abord télécharger la base de données.")
         return False
-    
+
     with get_db_connection() as conn:
         cursor = conn.cursor()
         new_notes_added = False
-        
+
         try:
             # Récupérer la date de la dernière mise à jour
             cursor.execute("SELECT MAX(last_updated) FROM instructions")
             last_update_str = cursor.fetchone()[0]
-            
+
             # Définir une date de départ par défaut (3 mois en arrière)
             default_start_date = datetime.now() - timedelta(days=90)
-            
+
             if last_update_str:
                 try:
                     last_update = datetime.strptime(last_update_str, '%Y-%m-%d %H:%M:%S.%f')
@@ -545,14 +545,14 @@ def update_database(weeks_limit=10):
             else:
                 # Aucune mise à jour antérieure trouvée, utiliser la date par défaut
                 last_update = default_start_date
-            
+
             # Récupérer l'année et la semaine actuelles
             current_date = datetime.now()
             current_year, current_week, _ = current_date.isocalendar()
-            
+
             # Récupérer l'année et la semaine de la dernière mise à jour
             start_year, start_week, _ = last_update.isocalendar()
-            
+
             col1, col2, col3 = st.columns(3)
             with col1:
                 st.info(f"📅 Dernière mise à jour: {last_update.strftime('%Y-%m-%d')}")
@@ -560,10 +560,10 @@ def update_database(weeks_limit=10):
                 st.info(f"🔍 Année/semaine de départ: {start_year}/{start_week}")
             with col3:
                 st.info(f"📌 Année/semaine actuelle: {current_year}/{current_week}")
-            
+
             # Générer les semaines à vérifier depuis la dernière mise à jour
             weeks_to_check = []
-            
+
             # Si même année
             if start_year == current_year:
                 for week in range(start_week, current_week + 1):
@@ -572,62 +572,62 @@ def update_database(weeks_limit=10):
                 # Ajouter les semaines restantes de l'année de départ
                 for week in range(start_week, 53):  # ISO peut avoir 53 semaines
                     weeks_to_check.append((start_year, week))
-                
+
                 # Ajouter les années intermédiaires complètes
                 for year in range(start_year + 1, current_year):
                     for week in range(1, 53):
                         weeks_to_check.append((year, week))
-                
+
                 # Ajouter les semaines de l'année en cours
                 for week in range(1, current_week + 1):
                     weeks_to_check.append((current_year, week))
-            
+
             # Récupérer les combinaisons année/semaine déjà en base
             cursor.execute("SELECT DISTINCT year, week FROM instructions")
             existing_weeks = set((int(row[0]), int(row[1])) for row in cursor.fetchall())
-            
+
             # Filtrer pour ne garder que les semaines manquantes
             weeks_to_check = [(year, week) for year, week in weeks_to_check if (year, week) not in existing_weeks]
-            
+
             st.write(f"🔍 Nombre de semaines manquantes à vérifier: {len(weeks_to_check)}")
-            
+
             if len(weeks_to_check) > weeks_limit:
                 st.warning(f"⚠️ Attention: {len(weeks_to_check)} semaines à vérifier. Limité à {weeks_limit} semaines les plus récentes.")
                 weeks_to_check = sorted(weeks_to_check, key=lambda x: (x[0], x[1]), reverse=True)[:weeks_limit]
-            
+
             new_instructions_total = 0
             progress_bar = st.progress(0)
-            
+
             for idx, (year_to_check, week_num) in enumerate(sorted(weeks_to_check)):
                 with st.status(f"🔍 Vérification année {year_to_check}, semaine {week_num}..."):
                     instructions = get_new_instructions(year_to_check, week_num)
                     if instructions:
                         st.write(f"📝 Instructions récupérées: {len(instructions)}")
                         new_instructions_total += len(instructions)
-                        
+
                         for title, link, pdf_link, objet, resume in instructions:
                             if add_instruction_to_db(year_to_check, week_num, title, link, pdf_link, objet, resume):
                                 new_notes_added = True
                                 st.write(f"✅ Ajouté: {title}")
-                
+
                 # Mettre à jour la barre de progression
                 progress_bar.progress((idx + 1) / len(weeks_to_check))
-            
+
             if new_notes_added:
                 st.success(f"✅ {new_instructions_total} nouvelles instructions ajoutées !")
-                
+
                 # Recharger les données et mettre à jour l'index
                 data = load_data()
                 update_whoosh_index(data)
-                
+
                 # Forcer le rechargement des données en cache
                 st.cache_data.clear()
-                
+
                 return True
             else:
                 st.info("📌 Aucune nouvelle instruction trouvée.")
                 return False
-                
+
         except Exception as e:
             st.error(f"❌ Erreur lors de la mise à jour: {e}")
             st.error(traceback.format_exc())
@@ -638,21 +638,21 @@ def check_scheduled_updates():
     """Vérifie s'il est temps de faire une mise à jour programmée."""
     if 'last_auto_update' not in st.session_state:
         st.session_state.last_auto_update = datetime.now() - timedelta(days=2)
-        
+
     current_time = datetime.now()
     time_diff = current_time - st.session_state.last_auto_update
     update_freq = st.session_state.update_frequency
-    
+
     # Déterminer s'il faut faire une mise à jour basée sur la fréquence choisie
     update_needed = False
-    
+
     if update_freq == "Quotidienne" and time_diff.days >= 1:
         update_needed = True
     elif update_freq == "Hebdomadaire" and time_diff.days >= 7:
         update_needed = True
     elif update_freq == "Mensuelle" and time_diff.days >= 30:
         update_needed = True
-        
+
     # Si une mise à jour est nécessaire, essayer de mettre à jour la base de données
     if update_needed:
         st.info(f"🔄 Mise à jour {update_freq.lower()} automatique...")
@@ -661,32 +661,32 @@ def check_scheduled_updates():
             st.session_state.last_auto_update = current_time
             st.success(f"✅ Mise à jour automatique effectuée ({update_freq.lower()})!")
         return success
-    
+
     return False
-    
+
 # --- Formatage des données pour l'affichage ---
 def format_data_for_display(df):
     """Formate les données pour un meilleur affichage."""
     if df.empty:
         return df
-    
+
     # Copier pour éviter de modifier l'original
     display_df = df.copy()
-    
+
     # Ajouter des colonnes formatées pour l'affichage
     display_df['affichage_date'] = display_df.apply(
         lambda row: f"{row['year']}-S{row['week']:02d}", axis=1
     )
-    
+
     # Limiter la taille des champs de texte longs
     display_df['resume_court'] = display_df['resume'].apply(
         lambda x: x[:100] + '...' if len(x) > 100 else x
     )
-    
+
     display_df['objet_court'] = display_df['objet'].apply(
         lambda x: x[:100] + '...' if len(x) > 100 else x
     )
-    
+
     return display_df
 
 # --- Interface utilisateur principale ---
@@ -704,7 +704,7 @@ ensure_database_structure()
 # Vérifier si la base de données existe, sinon proposer de la télécharger
 if not os.path.exists("data/sdssa_instructions.db"):
     st.markdown("<div class='warning-message'>⚠️ Aucune base de données trouvée. Veuillez télécharger la base de données pour commencer.</div>", unsafe_allow_html=True)
-    
+
     if st.button("📥 Télécharger la base de données depuis GitHub"):
         download_db_from_github(force=True)
         st.experimental_rerun()
@@ -724,65 +724,65 @@ tab1, tab2, tab3, tab4 = st.tabs(["🔍 Recherche", "📊 Visualisation", "⚙�
 
 with tab1:
     st.markdown("<h2 class='sub-header'>Recherche d'instructions</h2>", unsafe_allow_html=True)
-    
+
     col1, col2 = st.columns([3, 1])
-    
+
     with col1:
         st.markdown("<div class='card'>", unsafe_allow_html=True)
         search_query = st.text_input("🔍 Recherche avancée", placeholder="Entrez des mots-clés (ex: hygiène, restauration, contamination...)")
         st.markdown("</div>", unsafe_allow_html=True)
-    
+
     with col2:
         st.markdown("<div class='card'>", unsafe_allow_html=True)
         search_button = st.button("🔎 Rechercher", use_container_width=True)
         st.markdown("</div>", unsafe_allow_html=True)
-    
+
     # Filtres supplémentaires
     with st.expander("Filtres avancés"):
         col1, col2 = st.columns(2)
-        
+
         with col1:
             years = sorted(data['year'].unique(), reverse=True)
             selected_year = st.selectbox("Année", ["Toutes"] + list(years))
-            
+
         with col2:
             if selected_year != "Toutes":
                 weeks = sorted(data[data['year'] == selected_year]['week'].unique())
                 selected_week = st.selectbox("Semaine", ["Toutes"] + list(weeks))
             else:
                 selected_week = "Toutes"
-    
+
     # Effectuer la recherche
     if search_button or search_query or (selected_year != "Toutes"):
         with st.spinner("Recherche en cours..."):
             # Appliquer les filtres par année/semaine
             filtered_data = data.copy()
-            
+
             if selected_year != "Toutes":
                 filtered_data = filtered_data[filtered_data['year'] == selected_year]
-                
+
                 if selected_week != "Toutes":
                     filtered_data = filtered_data[filtered_data['week'] == selected_week]
-            
+
             # Si recherche textuelle, appliquer la recherche avancée
             if search_query:
                 search_results = search_instructions(search_query, ix, filtered_data)
                 st.session_state.search_results = search_results
             else:
                 st.session_state.search_results = filtered_data
-    
+
     # Afficher les résultats de recherche
     if st.session_state.search_results is not None:
         results = st.session_state.search_results
-        
+
         if results.empty:
             st.markdown("<div class='info-box'>Aucun résultat trouvé pour cette recherche.</div>", unsafe_allow_html=True)
         else:
             st.markdown(f"<div class='success-message'>📊 {len(results)} instructions trouvées</div>", unsafe_allow_html=True)
-            
+
             # Formater les données pour l'affichage
             display_data = format_data_for_display(results)
-            
+
             # Affichage des résultats sous forme de tableau
             st.markdown("<div class='card'>", unsafe_allow_html=True)
             st.dataframe(
@@ -796,34 +796,34 @@ with tab1:
                 hide_index=True
             )
             st.markdown("</div>", unsafe_allow_html=True)
-            
+
             # Sélection d'une instruction pour voir les détails
             st.markdown("<h3 class='sub-header'>Détails de l'instruction</h3>", unsafe_allow_html=True)
             selected_title = st.selectbox("Sélectionner une instruction", options=results['title'].tolist())
-            
+
             if selected_title:
                 st.session_state.selected_instruction = selected_title
                 instruction = results[results['title'] == selected_title].iloc[0]
-                
+
                 # Affichage détaillé de l'instruction
                 st.markdown("<div class='card'>", unsafe_allow_html=True)
-                
+
                 col1, col2 = st.columns([2, 1])
-                
+
                 with col1:
                     st.markdown(f"<h3>{instruction['title']}</h3>", unsafe_allow_html=True)
                     st.markdown(f"<p><strong>Année:</strong> {instruction['year']} | <strong>Semaine:</strong> {instruction['week']}</p>", unsafe_allow_html=True)
-                    
+
                 with col2:
                     st.markdown(f"<p><a href='{instruction['link']}' target='_blank'>🔗 Voir sur le site</a></p>", unsafe_allow_html=True)
                     st.markdown(f"<p><a href='{instruction['pdf_link']}' target='_blank'>📄 Télécharger le PDF</a></p>", unsafe_allow_html=True)
-                
+
                 st.markdown("<hr>", unsafe_allow_html=True)
                 st.markdown(f"<p><strong>Objet:</strong> {instruction['objet']}</p>", unsafe_allow_html=True)
                 st.markdown(f"<p><strong>Résumé:</strong> {instruction['resume']}</p>", unsafe_allow_html=True)
-                
+
                 st.markdown("</div>", unsafe_allow_html=True)
-                
+
                 # Bouton pour télécharger cette instruction
                 if st.download_button(
                     "📥 Télécharger cette instruction (CSV)",
@@ -835,92 +835,95 @@ with tab1:
 
 with tab2:
     st.markdown("<h2 class='sub-header'>Visualisation des données</h2>", unsafe_allow_html=True)
-    
+
     # Statistiques générales
     st.markdown("<div class='card'>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns(3)
-    
+
     with col1:
         st.metric("Total Instructions", len(data))
-    
+
     with col2:
         st.metric("Années couvertes", f"{min(data['year'])} - {max(data['year'])}")
-    
+
     with col3:
-        last_update = max(pd.to_datetime(data['last_updated']))
-        st.metric("Dernière mise à jour", last_update.strftime("%d/%m/%Y"))
-    
+        last_update = max(pd.to_datetime(data['last_updated'], errors='coerce'))
+        if pd.notna(last_update):
+            st.metric("Dernière mise à jour", last_update.strftime("%d/%m/%Y"))
+        else:
+            st.metric("Dernière mise à jour", "Inconnue")
+
     st.markdown("</div>", unsafe_allow_html=True)
-    
+
     # Graphique par année
     st.markdown("<h3 class='sub-header'>Répartition par année</h3>", unsafe_allow_html=True)
-    
+
     year_counts = data.groupby('year').size().reset_index(name='count')
-    
+
     st.markdown("<div class='card'>", unsafe_allow_html=True)
     st.bar_chart(year_counts, x='year', y='count')
     st.markdown("</div>", unsafe_allow_html=True)
-    
+
     # Répartition par mois
     st.markdown("<h3 class='sub-header'>Répartition par semaine</h3>", unsafe_allow_html=True)
-    
+
     week_counts = data.groupby('week').size().reset_index(name='count')
-    
+
     st.markdown("<div class='card'>", unsafe_allow_html=True)
     st.line_chart(week_counts, x='week', y='count')
     st.markdown("</div>", unsafe_allow_html=True)
 
 with tab3:
     st.markdown("<h2 class='sub-header'>Mise à jour des données</h2>", unsafe_allow_html=True)
-    
+
     col1, col2 = st.columns(2)
-    
+
     with col1:
         st.markdown("<div class='card'>", unsafe_allow_html=True)
         st.markdown("<h3>Mise à jour automatique</h3>", unsafe_allow_html=True)
-        
+
         update_freq = st.selectbox(
             "Fréquence de mise à jour automatique",
             options=["Désactivée", "Quotidienne", "Hebdomadaire", "Mensuelle"],
             index=2  # Par défaut: Hebdomadaire
         )
-        
+
         st.session_state.update_frequency = update_freq
-        
+
         if update_freq != "Désactivée":
             st.info(f"🔄 Les mises à jour automatiques sont configurées: {update_freq}")
-            
+
             if st.button("🔄 Vérifier maintenant"):
                 download_db_from_github()
         else:
             st.warning("⚠️ Les mises à jour automatiques sont désactivées")
-        
+
         st.markdown("</div>", unsafe_allow_html=True)
-    
+
     with col2:
         st.markdown("<div class='card'>", unsafe_allow_html=True)
         st.markdown("<h3>Mise à jour manuelle</h3>", unsafe_allow_html=True)
-        
+
         st.write("Téléchargez manuellement la dernière version ou mettez à jour avec de nouvelles instructions.")
-        
+
         col1, col2 = st.columns(2)
-        
+
         with col1:
             if st.button("📥 Télécharger depuis GitHub", use_container_width=True):
                 download_db_from_github(force=True)
-        
+
         with col2:
             if st.button("🔎 Rechercher nouvelles instructions", use_container_width=True):
                 update_database(weeks_limit=20)
-        
+
         st.markdown("</div>", unsafe_allow_html=True)
-    
+
     # Exporter les données
     st.markdown("<div class='card'>", unsafe_allow_html=True)
     st.markdown("<h3>Exporter les données</h3>", unsafe_allow_html=True)
-    
+
     col1, col2 = st.columns(2)
-    
+
     with col1:
         if st.download_button(
             "📥 Télécharger toutes les données (CSV)",
@@ -930,12 +933,12 @@ with tab3:
             use_container_width=True
         ):
             st.success("✅ Données téléchargées!")
-    
+
     with col2:
         # Exporter uniquement les instructions récentes
         recent_date = datetime.now() - timedelta(days=90)
         recent_data = data[pd.to_datetime(data['last_updated']) > recent_date]
-        
+
         if not recent_data.empty:
             if st.download_button(
                 f"📥 Instructions récentes ({len(recent_data)})",
@@ -945,32 +948,32 @@ with tab3:
                 use_container_width=True
             ):
                 st.success("✅ Données récentes téléchargées!")
-    
+
     st.markdown("</div>", unsafe_allow_html=True)
-    
+
     # Gestion des sauvegardes
     st.markdown("<div class='card'>", unsafe_allow_html=True)
     st.markdown("<h3>Gestion des sauvegardes</h3>", unsafe_allow_html=True)
-    
+
     backups = sorted(glob.glob("backups/sdssa_instructions_*.db"), reverse=True)
-    
+
     if backups:
         st.write(f"📁 {len(backups)} sauvegardes disponibles:")
-        
+
         for backup in backups:
             backup_name = os.path.basename(backup)
             backup_date = backup_name.replace("sdssa_instructions_", "").replace(".db", "")
-            
+
             try:
                 formatted_date = datetime.strptime(backup_date, "%Y%m%d_%H%M%S").strftime("%d/%m/%Y à %H:%M:%S")
             except:
                 formatted_date = backup_date
-            
+
             col1, col2 = st.columns([3, 1])
-            
+
             with col1:
                 st.write(f"📂 Sauvegarde du {formatted_date}")
-            
+
             with col2:
                 if st.button(f"🔄 Restaurer", key=f"restore_{backup_name}"):
                     try:
@@ -978,11 +981,11 @@ with tab3:
                         if os.path.exists("data/sdssa_instructions.db"):
                             current_backup = f"backups/pre_restore_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
                             shutil.copy2("data/sdssa_instructions.db", current_backup)
-                        
+
                         # Restaurer la sauvegarde
                         shutil.copy2(backup, "data/sdssa_instructions.db")
                         st.success(f"✅ Base de données restaurée depuis la sauvegarde du {formatted_date}")
-                        
+
                         # Recharger les données
                         st.cache_data.clear()
                         st.experimental_rerun()
@@ -990,18 +993,18 @@ with tab3:
                         st.error(f"❌ Erreur lors de la restauration: {e}")
     else:
         st.info("📌 Aucune sauvegarde disponible")
-    
+
     st.markdown("</div>", unsafe_allow_html=True)
 
 with tab4:
     st.markdown("<h2 class='sub-header'>À propos de l'application</h2>", unsafe_allow_html=True)
-    
+
     st.markdown("<div class='card'>", unsafe_allow_html=True)
     st.markdown("""
     <h3>Instructions Techniques DGAL / SDSSA</h3>
-    <p>Cette application permet de consulter, rechercher et gérer les instructions techniques 
+    <p>Cette application permet de consulter, rechercher et gérer les instructions techniques
     de la Direction Générale de l'Alimentation (DGAL) / Service de la Sécurité Sanitaire des Aliments (SDSSA).</p>
-    
+
     <h4>Fonctionnalités:</h4>
     <ul>
         <li>Recherche avancée avec prise en compte des synonymes</li>
@@ -1011,7 +1014,7 @@ with tab4:
         <li>Mise à jour automatique configurables</li>
         <li>Système de sauvegarde et restauration</li>
     </ul>
-    
+
     <h4>Utilisation:</h4>
     <ol>
         <li>Utilisez l'onglet <strong>Recherche</strong> pour trouver des instructions spécifiques</li>
@@ -1021,13 +1024,13 @@ with tab4:
     </ol>
     """, unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
-    
+
     # Informations techniques
     st.markdown("<div class='card'>", unsafe_allow_html=True)
     st.markdown("<h3>Informations techniques</h3>", unsafe_allow_html=True)
-    
+
     col1, col2 = st.columns(2)
-    
+
     with col1:
         st.markdown("""
         <h4>Technologies utilisées:</h4>
@@ -1039,7 +1042,7 @@ with tab4:
             <li>NLTK (traitement du langage naturel)</li>
         </ul>
         """, unsafe_allow_html=True)
-    
+
     with col2:
         st.markdown("""
         <h4>Structure des données:</h4>
@@ -1050,16 +1053,16 @@ with tab4:
             <li>Synchronisation avec GitHub</li>
         </ul>
         """, unsafe_allow_html=True)
-    
+
     st.markdown("</div>", unsafe_allow_html=True)
-    
+
     # Source des données
     st.markdown("<div class='card'>", unsafe_allow_html=True)
     st.markdown("<h3>Source des données</h3>", unsafe_allow_html=True)
     st.markdown("""
     <p>Les données sont extraites du Bulletin Officiel du Ministère de l'Agriculture:</p>
     <a href="https://info.agriculture.gouv.fr/boagri/" target="_blank">https://info.agriculture.gouv.fr/boagri/</a>
-    
+
     <p style="margin-top: 15px;">Dépôt GitHub contenant la base de données:</p>
     <a href="https://github.com/M00N69/sdssa-instructions-app" target="_blank">https://github.com/M00N69/sdssa-instructions-app</a>
     """, unsafe_allow_html=True)
@@ -1087,7 +1090,7 @@ if __name__ == "__main__":
     # Vérifier si c'est la première exécution
     if 'first_run' not in st.session_state:
         st.session_state.first_run = True
-        
+
         # Si la base de données existe mais n'a pas été vérifiée récemment
         if os.path.exists("data/sdssa_instructions.db") and (
             st.session_state.db_last_checked is None or
