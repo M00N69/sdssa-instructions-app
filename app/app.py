@@ -1024,16 +1024,26 @@ with tab3:
                         if os.path.exists("data/sdssa_instructions.db"):
                             current_backup = f"backups/pre_restore_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
                             shutil.copy2("data/sdssa_instructions.db", current_backup)
-
+            
                         # Restaurer la sauvegarde
                         shutil.copy2(backup, "data/sdssa_instructions.db")
                         st.success(f"✅ Base de données restaurée depuis la sauvegarde du {formatted_date}")
-
+            
                         # Recharger les données
                         st.cache_data.clear()
                         st.rerun()
                     except Exception as e:
                         st.error(f"❌ Erreur lors de la restauration: {e}")
+            
+    # Ajouter un bouton de téléchargement à côté du bouton de restauration
+    if st.download_button(
+        "📥 Télécharger",
+        data=open(backup, 'rb').read(),
+        file_name=f"sdssa_instructions_{backup_date}.db",
+        mime="application/octet-stream",
+        key=f"download_{backup_name}"
+    ):
+        st.success(f"✅ Sauvegarde du {formatted_date} téléchargée!")
     else:
         st.info("📌 Aucune sauvegarde disponible")
 
