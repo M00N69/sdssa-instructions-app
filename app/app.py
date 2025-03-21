@@ -19,6 +19,7 @@ import subprocess
 import hashlib
 import glob
 import shutil
+import base64
 from PIL import Image
 from io import BytesIO
 
@@ -185,6 +186,628 @@ initialize_nltk()
 os.makedirs('data', exist_ok=True)
 os.makedirs('indexdir', exist_ok=True)
 os.makedirs('backups', exist_ok=True)
+
+# --- Fonction pour mettre à jour la base de données sur GitHub ---
+def push_db_to_github():
+    """Pousse la base de données locale vers le dépôt GitHub."""
+    # Message de statut pour l'utilisateur
+    with st.status("Mise à jour de la base de données sur GitHub...") as status:
+        try:
+            # Vérifier si le fichier local existe
+            local_db_path = "data/sdssa_instructions.db"
+            if not os.path.exists(local_db_path):
+                st.error("❌ Impossible de trouver la base de données locale à mettre à jour.")
+                status.update(label="❌ Échec de la mise à jour", state="error")
+                return False
+
+# --- Vérification programmée des mises à jour ---
+def check_scheduled_updates():
+    """Vérifie s'il est temps de faire une mise à jour programmée."""
+    if 'last_auto_update' not in st.session_state:
+        st.session_state.last_auto_update = datetime.now() - timedelta(days=2)
+        
+    current_time = datetime.now()
+    time_diff = current_time - st.session_state.last_auto_update
+    update_freq = st.session_state.update_frequency
+    
+    # Déterminer s'il faut faire une mise à jour basée sur la fréquence choisie
+    update_needed = False
+    
+    if update_freq == "Quotidienne" and time_diff.days >= 1:
+        update_needed = True
+    elif update_freq == "Hebdomadaire" and time_diff.days >= 7:
+        update_needed = True
+    elif update_freq == "Mensuelle" and time_diff.days >= 30:
+        update_needed = True
+        
+    # Si une mise à jour est nécessaire, essayer de mettre à jour la base de données
+    if update_needed:
+        st.info(f"🔄 Mise à jour {update_freq.lower()} automatique...")
+        success = download_db_from_github()
+        if success:
+            st.session_state.last_auto_update = current_time
+            st.success(f"✅ Mise à jour automatique effectuée ({update_freq.lower()})!")
+        return success
+    
+    return False
+    
+# --- Formatage des données pour l'affichage ---
+def format_data_for_display(df):
+    """Formate les données pour un meilleur affichage."""
+    if df.empty:
+        return df
+    
+    # Copier pour éviter de modifier l'original
+    display_df = df.copy()
+    
+    # Ajouter des colonnes formatées pour l'affichage
+    display_df['affichage_date'] = display_df.apply(
+        lambda row: f"{row['year']}-S{row['week']:02d}", axis=1
+    )
+    
+    # Limiter la taille des champs de texte longs
+    display_df['resume_court'] = display_df['resume'].apply(
+        lambda x: x[:100] + '...' if len(x) > 100 else x
+    )
+    
+    display_df['objet_court'] = display_df['objet'].apply(
+        lambda x: x[:100] + '...' if len(x) > 100 else x
+    )
+    
+    return display_df
+
+# --- Interface utilisateur principale ---
+
+# --- Titre de l'application ---
+st.markdown("<h1 class='main-header'>📚 Instructions Techniques DGAL / SDSSA</h1>", unsafe_allow_html=True)
+
+# --- Vérifier les mises à jour automatiques ---
+if st.session_state.update_frequency != "Désactivée":
+    check_scheduled_updates()
+
+# --- Initialisation et Chargement des Données ---
+ensure_database_structure()
+
+# Vérifier si la base de données existe, sinon proposer de la télécharger
+if not os.path.exists("data/sdssa_instructions.db"):
+    st.markdown("<div class='warning-message'>⚠️ Aucune base de données trouvée. Veuillez télécharger la base de données pour commencer.</div>", unsafe_allow_html=True)
+    
+    if st.button("📥 Télécharger la base de données depuis GitHub"):
+        download_db_from_github(force=True)
+        st.rerun()
+    st.stop()
+
+# Charger les données
+data = load_data()
+if data.empty:
+    st.error("❌ Aucune donnée trouvée dans la base de données.")
+    st.stop()
+
+# Créer ou ouvrir l'index Whoosh
+ix = create_whoosh_index(data)
+
+# --- Interface principale avec onglets ---
+tab1, tab2, tab3, tab4 = st.tabs(["🔍 Recherche", "📊 Visualisation", "⚙️ Mise à jour", "ℹ️ Informations"])
+
+with tab1:
+    st.markdown("<h2 class='sub-header'>Recherche d'instructions</h2>", unsafe_allow_html=True)
+    
+    col1, col2 = st.columns([3, 1])
+    
+    with col1:
+        st.markdown("<div class='card'>", unsafe_allow_html=True)
+        search_query = st.text_input("🔍 Recherche avancée", placeholder="Entrez des mots-clés (ex: hygiène, restauration, contamination...)")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+# --- Pied de page ---
+st.markdown("<div class='footer'>", unsafe_allow_html=True)
+st.markdown("""
+<p>Application SDSSA Instructions - Développée avec Streamlit</p>
+<p>Dernière mise à jour: Mars 2025</p>
+""", unsafe_allow_html=True)
+
+# Logo/Branding dans le footer
+st.markdown("""
+<div style="text-align: center; margin-top: 20px;">
+    <a href="https://www.visipilot.com" target="_blank">
+        <img src="https://github.com/M00N69/sdssa-instructions-app/blob/main/app/assets/logo.png?raw=true" alt="Visipilot Logo" style="width: 200px;">
+    </a>
+</div>
+""", unsafe_allow_html=True)
+st.markdown("</div>", unsafe_allow_html=True)
+
+# --- Point d'entrée principal ---
+if __name__ == "__main__":
+    # Vérifier si c'est la première exécution
+    if 'first_run' not in st.session_state:
+        st.session_state.first_run = True
+        
+        # Si la base de données existe mais n'a pas été vérifiée récemment
+        if os.path.exists("data/sdssa_instructions.db") and (
+            st.session_state.db_last_checked is None or
+            (datetime.now() - st.session_state.db_last_checked).days > 1
+        ):
+            # Vérifier automatiquement les mises à jour au démarrage
+            download_db_from_github()
+
+with tab4:
+    st.markdown("<h2 class='sub-header'>À propos de l'application</h2>", unsafe_allow_html=True)
+    
+    st.markdown("<div class='card'>", unsafe_allow_html=True)
+    st.markdown("""
+    <h3>Instructions Techniques DGAL / SDSSA</h3>
+    <p>Cette application permet de consulter, rechercher et gérer les instructions techniques 
+    de la Direction Générale de l'Alimentation (DGAL) / Service de la Sécurité Sanitaire des Aliments (SDSSA).</p>
+    
+    <h4>Fonctionnalités:</h4>
+    <ul>
+        <li>Recherche avancée avec prise en compte des synonymes</li>
+        <li>Filtrage par année et semaine</li>
+        <li>Visualisation des données</li>
+        <li>Téléchargement automatique depuis GitHub</li>
+        <li>Mise à jour automatique configurables</li>
+        <li>Système de sauvegarde et restauration</li>
+        <li>Mise à jour de la base de données vers GitHub</li>
+    </ul>
+    
+    <h4>Utilisation:</h4>
+    <ol>
+        <li>Utilisez l'onglet <strong>Recherche</strong> pour trouver des instructions spécifiques</li>
+        <li>Consultez l'onglet <strong>Visualisation</strong> pour voir des statistiques sur les données</li>
+        <li>Dans l'onglet <strong>Mise à jour</strong>, configurez la fréquence de mise à jour automatique</li>
+        <li>Les détails des instructions affichent l'objet, le résumé et des liens vers les documents originaux</li>
+        <li>Après des mises à jour locales, envoyez la base de données vers GitHub pour la partager</li>
+    </ol>
+    """, unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+    
+    # Informations techniques
+    st.markdown("<div class='card'>", unsafe_allow_html=True)
+    st.markdown("<h3>Informations techniques</h3>", unsafe_allow_html=True)
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("""
+        <h4>Technologies utilisées:</h4>
+        <ul>
+            <li>Streamlit</li>
+            <li>SQLite</li>
+            <li>Whoosh (moteur de recherche)</li>
+            <li>BeautifulSoup (web scraping)</li>
+            <li>NLTK (traitement du langage naturel)</li>
+            <li>GitHub API (synchronisation)</li>
+        </ul>
+        """, unsafe_allow_html=True)
+    
+    with col2:
+        st.markdown("""
+        <h4>Structure des données:</h4>
+        <ul>
+            <li>Base de données SQLite</li>
+            <li>Index de recherche Whoosh</li>
+            <li>Sauvegardes automatiques</li>
+            <li>Synchronisation avec GitHub</li>
+        </ul>
+        """, unsafe_allow_html=True)
+    
+    st.markdown("</div>", unsafe_allow_html=True)
+    
+    # Source des données
+    st.markdown("<div class='card'>", unsafe_allow_html=True)
+    st.markdown("<h3>Source des données</h3>", unsafe_allow_html=True)
+    st.markdown("""
+    <p>Les données sont extraites du Bulletin Officiel du Ministère de l'Agriculture:</p>
+    <a href="https://info.agriculture.gouv.fr/boagri/" target="_blank">https://info.agriculture.gouv.fr/boagri/</a>
+    
+    <p style="margin-top: 15px;">Dépôt GitHub contenant la base de données:</p>
+    <a href="https://github.com/M00N69/sdssa-instructions-app" target="_blank">https://github.com/M00N69/sdssa-instructions-app</a>
+    """, unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+    
+    # Exporter les données
+    st.markdown("<div class='card'>", unsafe_allow_html=True)
+    st.markdown("<h3>Exporter les données</h3>", unsafe_allow_html=True)
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.download_button(
+            "📥 Télécharger toutes les données (CSV)",
+            data=data.to_csv(index=False).encode('utf-8'),
+            file_name="sdssa_instructions_complete.csv",
+            mime="text/csv",
+            use_container_width=True
+        ):
+            st.success("✅ Données téléchargées!")
+    
+    with col2:
+        # Exporter uniquement les instructions récentes
+        recent_date = datetime.now() - timedelta(days=90)
+        recent_data = data[pd.to_datetime(data['last_updated']) > recent_date]
+        
+        if not recent_data.empty:
+            if st.download_button(
+                f"📥 Instructions récentes ({len(recent_data)})",
+                data=recent_data.to_csv(index=False).encode('utf-8'),
+                file_name="sdssa_instructions_recent.csv",
+                mime="text/csv",
+                use_container_width=True
+            ):
+                st.success("✅ Données récentes téléchargées!")
+    
+    st.markdown("</div>", unsafe_allow_html=True)
+    
+    # Gestion des sauvegardes
+    st.markdown("<div class='card'>", unsafe_allow_html=True)
+    st.markdown("<h3>Gestion des sauvegardes</h3>", unsafe_allow_html=True)
+    
+    backups = sorted(glob.glob("backups/sdssa_instructions_*.db"), reverse=True)
+    
+    if backups:
+        st.write(f"📁 {len(backups)} sauvegardes disponibles:")
+        
+        for backup in backups:
+            backup_name = os.path.basename(backup)
+            backup_date = backup_name.replace("sdssa_instructions_", "").replace(".db", "")
+            
+            try:
+                formatted_date = datetime.strptime(backup_date, "%Y%m%d_%H%M%S").strftime("%d/%m/%Y à %H:%M:%S")
+            except:
+                formatted_date = backup_date
+            
+            col1, col2 = st.columns([3, 1])
+            
+            with col1:
+                st.write(f"📂 Sauvegarde du {formatted_date}")
+            
+            with col2:
+                if st.button(f"🔄 Restaurer", key=f"restore_{backup_name}"):
+                    try:
+                        # Sauvegarder la base actuelle avant restauration
+                        if os.path.exists("data/sdssa_instructions.db"):
+                            current_backup = f"backups/pre_restore_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
+                            shutil.copy2("data/sdssa_instructions.db", current_backup)
+                        
+                        # Restaurer la sauvegarde
+                        shutil.copy2(backup, "data/sdssa_instructions.db")
+                        st.success(f"✅ Base de données restaurée depuis la sauvegarde du {formatted_date}")
+                        
+                        # Recharger les données
+                        st.cache_data.clear()
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Erreur lors de la restauration: {e}")
+    else:
+        st.info("📌 Aucune sauvegarde disponible")
+    
+    st.markdown("</div>", unsafe_allow_html=True)
+
+with tab3:
+    st.markdown("<h2 class='sub-header'>Mise à jour des données</h2>", unsafe_allow_html=True)
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("<div class='card'>", unsafe_allow_html=True)
+        st.markdown("<h3>Mise à jour automatique</h3>", unsafe_allow_html=True)
+        
+        update_freq = st.selectbox(
+            "Fréquence de mise à jour automatique",
+            options=["Désactivée", "Quotidienne", "Hebdomadaire", "Mensuelle"],
+            index=2  # Par défaut: Hebdomadaire
+        )
+        
+        st.session_state.update_frequency = update_freq
+        
+        if update_freq != "Désactivée":
+            st.info(f"🔄 Les mises à jour automatiques sont configurées: {update_freq}")
+            
+            if st.button("🔄 Vérifier maintenant"):
+                download_db_from_github()
+        else:
+            st.warning("⚠️ Les mises à jour automatiques sont désactivées")
+        
+        st.markdown("</div>", unsafe_allow_html=True)
+    
+    with col2:
+        st.markdown("<div class='card'>", unsafe_allow_html=True)
+        st.markdown("<h3>Mise à jour manuelle</h3>", unsafe_allow_html=True)
+        
+        st.write("Téléchargez manuellement la dernière version ou mettez à jour avec de nouvelles instructions.")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("📥 Télécharger depuis GitHub", use_container_width=True):
+                download_db_from_github(force=True)
+        
+        with col2:
+            if st.button("🔎 Rechercher nouvelles instructions", use_container_width=True):
+                update_database(weeks_limit=20)
+        
+        st.markdown("</div>", unsafe_allow_html=True)
+    
+    # Nouvelle section pour la mise à jour vers GitHub
+    st.markdown("<div class='card'>", unsafe_allow_html=True)
+    st.markdown("<h3>Mise à jour vers GitHub</h3>", unsafe_allow_html=True)
+    
+    st.write("Envoyer la base de données locale actualisée vers GitHub pour la rendre disponible à tous les utilisateurs.")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Obtenir la date de la dernière mise à jour locale
+        if os.path.exists("data/sdssa_instructions.db"):
+            last_modified = datetime.fromtimestamp(os.path.getmtime("data/sdssa_instructions.db"))
+            st.info(f"📅 Version locale: {last_modified.strftime('%d/%m/%Y à %H:%M:%S')}")
+        else:
+            st.warning("⚠️ Aucune base de données locale trouvée")
+    
+    with col2:
+        if st.button("📤 Envoyer vers GitHub", use_container_width=True, help="Mettre à jour la base de données sur GitHub"):
+            # Vérifier si l'utilisateur a fait des mises à jour locales
+            if 'is_db_updated' in st.session_state and st.session_state.is_db_updated:
+                push_db_to_github()
+                # Réinitialiser l'état de mise à jour
+                st.session_state.is_db_updated = False
+            else:
+                if st.checkbox("💡 Aucune mise à jour locale détectée. Envoyer quand même?"):
+                    push_db_to_github()
+    
+    st.markdown("""
+    <div class="info-box">
+        <p><strong>📌 Note:</strong> Cette fonction met à jour la base de données centrale sur GitHub.
+        Cette mise à jour sera disponible pour tous les autres utilisateurs lors de leur prochaine synchronisation.</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("</div>", unsafe_allow_html=True)
+    
+    with col2:
+        st.markdown("<div class='card'>", unsafe_allow_html=True)
+        search_button = st.button("🔎 Rechercher", use_container_width=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+    
+    # Filtres supplémentaires
+    with st.expander("Filtres avancés"):
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            years = sorted(data['year'].unique(), reverse=True)
+            selected_year = st.selectbox("Année", ["Toutes"] + list(years))
+            
+        with col2:
+            if selected_year != "Toutes":
+                weeks = sorted(data[data['year'] == selected_year]['week'].unique())
+                selected_week = st.selectbox("Semaine", ["Toutes"] + list(weeks))
+            else:
+                selected_week = "Toutes"
+    
+    # Effectuer la recherche
+    if search_button or search_query or (selected_year != "Toutes"):
+        with st.spinner("Recherche en cours..."):
+            # Appliquer les filtres par année/semaine
+            filtered_data = data.copy()
+            
+            if selected_year != "Toutes":
+                filtered_data = filtered_data[filtered_data['year'] == selected_year]
+                
+                if selected_week != "Toutes":
+                    filtered_data = filtered_data[filtered_data['week'] == selected_week]
+            
+            # Si recherche textuelle, appliquer la recherche avancée
+            if search_query:
+                search_results = search_instructions(search_query, ix, filtered_data)
+                st.session_state.search_results = search_results
+            else:
+                st.session_state.search_results = filtered_data
+    
+    # Afficher les résultats de recherche
+    if 'search_results' in st.session_state and st.session_state.search_results is not None:
+        results = st.session_state.search_results
+        
+        if results.empty:
+            st.markdown("<div class='info-box'>Aucun résultat trouvé pour cette recherche.</div>", unsafe_allow_html=True)
+        else:
+            st.markdown(f"<div class='success-message'>📊 {len(results)} instructions trouvées</div>", unsafe_allow_html=True)
+            
+            # Formater les données pour l'affichage
+            display_data = format_data_for_display(results)
+            
+            # Affichage des résultats sous forme de tableau
+            st.markdown("<div class='card'>", unsafe_allow_html=True)
+            st.dataframe(
+                display_data[['affichage_date', 'title', 'objet_court']],
+                column_config={
+                    "affichage_date": "Date",
+                    "title": "Titre",
+                    "objet_court": "Objet"
+                },
+                use_container_width=True,
+                hide_index=True
+            )
+            st.markdown("</div>", unsafe_allow_html=True)
+    else:
+        # Afficher toutes les données par défaut si aucune recherche n'a été effectuée
+        display_data = format_data_for_display(data)
+        st.markdown("<div class='card'>", unsafe_allow_html=True)
+        st.dataframe(
+            display_data[['affichage_date', 'title', 'objet_court']],
+            column_config={
+                "affichage_date": "Date",
+                "title": "Titre",
+                "objet_court": "Objet"
+            },
+            use_container_width=True,
+            hide_index=True
+        )
+        st.markdown("</div>", unsafe_allow_html=True)
+            
+    # Sélection d'une instruction pour voir les détails
+    if 'search_results' in st.session_state and st.session_state.search_results is not None and not st.session_state.search_results.empty:
+        results = st.session_state.search_results
+        st.markdown("<h3 class='sub-header'>Détails de l'instruction</h3>", unsafe_allow_html=True)
+        selected_title = st.selectbox("Sélectionner une instruction", options=results['title'].tolist())
+        
+        if selected_title:
+            st.session_state.selected_instruction = selected_title
+            instruction = results[results['title'] == selected_title].iloc[0]
+            
+            # Affichage détaillé de l'instruction
+            st.markdown("<div class='card'>", unsafe_allow_html=True)
+            
+            col1, col2 = st.columns([2, 1])
+            
+            with col1:
+                st.markdown(f"<h3>{instruction['title']}</h3>", unsafe_allow_html=True)
+                st.markdown(f"<p><strong>Année:</strong> {instruction['year']} | <strong>Semaine:</strong> {instruction['week']}</p>", unsafe_allow_html=True)
+                
+            with col2:
+                st.markdown(f"<p><a href='{instruction['link']}' target='_blank'>🔗 Voir sur le site</a></p>", unsafe_allow_html=True)
+                st.markdown(f"<p><a href='{instruction['pdf_link']}' target='_blank'>📄 Télécharger le PDF</a></p>", unsafe_allow_html=True)
+            
+            st.markdown("<hr>", unsafe_allow_html=True)
+            st.markdown(f"<p><strong>Objet:</strong> {instruction['objet']}</p>", unsafe_allow_html=True)
+            st.markdown(f"<p><strong>Résumé:</strong> {instruction['resume']}</p>", unsafe_allow_html=True)
+            
+            st.markdown("</div>", unsafe_allow_html=True)
+            
+            # Bouton pour télécharger cette instruction
+            if st.download_button(
+                "📥 Télécharger cette instruction (CSV)",
+                data=results[results['title'] == selected_title].to_csv(index=False).encode('utf-8'),
+                file_name=f"instruction_{instruction['year']}_{instruction['week']}.csv",
+                mime="text/csv"
+            ):
+                st.success("✅ Instruction téléchargée!")
+
+with tab2:
+    st.markdown("<h2 class='sub-header'>Visualisation des données</h2>", unsafe_allow_html=True)
+    
+    # Statistiques générales
+    st.markdown("<div class='card'>", unsafe_allow_html=True)
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.metric("Total Instructions", len(data))
+    
+    with col2:
+        st.metric("Années couvertes", f"{min(data['year'])} - {max(data['year'])}")
+    
+    with col3:
+        # Correction de l'erreur à la ligne 851
+        if 'last_updated' in data.columns and not data['last_updated'].isna().all():
+            try:
+                last_update = max(pd.to_datetime(data['last_updated'], errors='coerce').dropna())
+                last_update_str = last_update.strftime("%d/%m/%Y")
+            except (ValueError, TypeError):
+                last_update_str = "Non disponible"
+        else:
+            last_update_str = "Non disponible"
+            
+        st.metric("Dernière mise à jour", last_update_str)
+    
+    st.markdown("</div>", unsafe_allow_html=True)
+    
+    # Graphique par année
+    st.markdown("<h3 class='sub-header'>Répartition par année</h3>", unsafe_allow_html=True)
+    
+    year_counts = data.groupby('year').size().reset_index(name='count')
+    
+    st.markdown("<div class='card'>", unsafe_allow_html=True)
+    st.bar_chart(year_counts, x='year', y='count')
+    st.markdown("</div>", unsafe_allow_html=True)
+    
+    # Répartition par mois
+    st.markdown("<h3 class='sub-header'>Répartition par semaine</h3>", unsafe_allow_html=True)
+    
+    week_counts = data.groupby('week').size().reset_index(name='count')
+    
+    st.markdown("<div class='card'>", unsafe_allow_html=True)
+    st.line_chart(week_counts, x='week', y='count')
+    st.markdown("</div>", unsafe_allow_html=True)
+            
+            # Récupérer le token GitHub depuis les secrets Streamlit
+            try:
+                github_token = st.secrets["GITHUB_TOKEN"]
+                if not github_token:
+                    st.error("❌ Token GitHub vide. Veuillez configurer le secret GITHUB_TOKEN dans Streamlit Cloud.")
+                    status.update(label="❌ Échec de la mise à jour", state="error")
+                    return False
+            except Exception as e:
+                st.error("❌ Token GitHub manquant. Veuillez configurer le secret GITHUB_TOKEN dans Streamlit Cloud.")
+                status.update(label="❌ Échec de la mise à jour", state="error")
+                return False
+            
+            # Informations du dépôt
+            owner = "M00N69"
+            repo = "sdssa-instructions-app"
+            path = "data/sdssa_instructions.db"
+            branch = "main"  # ou 'master' selon votre configuration
+            
+            # Préparation des en-têtes pour l'API GitHub
+            headers = {
+                "Authorization": f"token {github_token}",
+                "Accept": "application/vnd.github.v3+json"
+            }
+            
+            st.write("🔍 Vérification du fichier sur GitHub...")
+            
+            # 1. Vérifier si le fichier existe déjà sur GitHub pour obtenir son SHA
+            url_get_file = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}?ref={branch}"
+            response = requests.get(url_get_file, headers=headers)
+            
+            file_sha = None
+            if response.status_code == 200:
+                file_sha = response.json().get("sha")
+                st.write("✅ Fichier existant trouvé sur GitHub")
+            elif response.status_code == 404:
+                st.write("ℹ️ Première mise à jour du fichier sur GitHub")
+            else:
+                st.error(f"❌ Erreur lors de la vérification du fichier sur GitHub: {response.status_code}")
+                st.error(response.text)
+                status.update(label="❌ Échec de la mise à jour", state="error")
+                return False
+            
+            # 2. Lire et encoder le contenu du fichier local
+            with open(local_db_path, "rb") as file:
+                file_content = file.read()
+                file_content_base64 = base64.b64encode(file_content).decode("utf-8")
+            
+            st.write("📤 Préparation de la mise à jour...")
+            
+            # 3. Préparer les données pour la requête
+            data = {
+                "message": f"Mise à jour de la base de données - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+                "content": file_content_base64,
+                "branch": branch
+            }
+            
+            # Ajouter le SHA si le fichier existe déjà
+            if file_sha:
+                data["sha"] = file_sha
+            
+            # 4. Envoyer la mise à jour à GitHub
+            st.write("📤 Envoi de la mise à jour vers GitHub...")
+            url_update = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}"
+            response = requests.put(url_update, headers=headers, json=data)
+            
+            if response.status_code in [200, 201]:
+                st.success("✅ Base de données mise à jour avec succès sur GitHub!")
+                status.update(label="✅ Mise à jour réussie!", state="complete")
+                return True
+            else:
+                st.error(f"❌ Erreur lors de la mise à jour sur GitHub: {response.status_code}")
+                st.error(response.text)
+                status.update(label="❌ Échec de la mise à jour", state="error")
+                return False
+                
+        except Exception as e:
+            st.error(f"❌ Exception lors de la mise à jour sur GitHub: {str(e)}")
+            st.error(traceback.format_exc())
+            status.update(label="❌ Échec de la mise à jour", state="error")
+            return False
 
 # --- Fonction pour télécharger la base de données depuis GitHub ---
 def download_db_from_github(force=False):
@@ -594,6 +1217,7 @@ def update_database(weeks_limit=10):
             
             if new_notes_added:
                 st.success(f"✅ {new_instructions_total} nouvelles instructions ajoutées !")
+                st.session_state.is_db_updated = True
                 
                 # Recharger les données et mettre à jour l'index
                 data = load_data()
@@ -611,492 +1235,3 @@ def update_database(weeks_limit=10):
             st.error(f"❌ Erreur lors de la mise à jour: {e}")
             st.error(traceback.format_exc())
             return False
-
-# --- Vérification programmée des mises à jour ---
-def check_scheduled_updates():
-    """Vérifie s'il est temps de faire une mise à jour programmée."""
-    if 'last_auto_update' not in st.session_state:
-        st.session_state.last_auto_update = datetime.now() - timedelta(days=2)
-        
-    current_time = datetime.now()
-    time_diff = current_time - st.session_state.last_auto_update
-    update_freq = st.session_state.update_frequency
-    
-    # Déterminer s'il faut faire une mise à jour basée sur la fréquence choisie
-    update_needed = False
-    
-    if update_freq == "Quotidienne" and time_diff.days >= 1:
-        update_needed = True
-    elif update_freq == "Hebdomadaire" and time_diff.days >= 7:
-        update_needed = True
-    elif update_freq == "Mensuelle" and time_diff.days >= 30:
-        update_needed = True
-        
-    # Si une mise à jour est nécessaire, essayer de mettre à jour la base de données
-    if update_needed:
-        st.info(f"🔄 Mise à jour {update_freq.lower()} automatique...")
-        success = download_db_from_github()
-        if success:
-            st.session_state.last_auto_update = current_time
-            st.success(f"✅ Mise à jour automatique effectuée ({update_freq.lower()})!")
-        return success
-    
-    return False
-    
-# --- Formatage des données pour l'affichage ---
-def format_data_for_display(df):
-    """Formate les données pour un meilleur affichage."""
-    if df.empty:
-        return df
-    
-    # Copier pour éviter de modifier l'original
-    display_df = df.copy()
-    
-    # Ajouter des colonnes formatées pour l'affichage
-    display_df['affichage_date'] = display_df.apply(
-        lambda row: f"{row['year']}-S{row['week']:02d}", axis=1
-    )
-    
-    # Limiter la taille des champs de texte longs
-    display_df['resume_court'] = display_df['resume'].apply(
-        lambda x: x[:100] + '...' if len(x) > 100 else x
-    )
-    
-    display_df['objet_court'] = display_df['objet'].apply(
-        lambda x: x[:100] + '...' if len(x) > 100 else x
-    )
-    
-    return display_df
-
-# --- Interface utilisateur principale ---
-
-# --- Titre de l'application ---
-st.markdown("<h1 class='main-header'>📚 Instructions Techniques DGAL / SDSSA</h1>", unsafe_allow_html=True)
-
-# --- Vérifier les mises à jour automatiques ---
-if st.session_state.update_frequency != "Désactivée":
-    check_scheduled_updates()
-
-# --- Initialisation et Chargement des Données ---
-ensure_database_structure()
-
-# Vérifier si la base de données existe, sinon proposer de la télécharger
-if not os.path.exists("data/sdssa_instructions.db"):
-    st.markdown("<div class='warning-message'>⚠️ Aucune base de données trouvée. Veuillez télécharger la base de données pour commencer.</div>", unsafe_allow_html=True)
-    
-    if st.button("📥 Télécharger la base de données depuis GitHub"):
-        download_db_from_github(force=True)
-        st.rerun()
-    st.stop()
-
-# Charger les données
-data = load_data()
-if data.empty:
-    st.error("❌ Aucune donnée trouvée dans la base de données.")
-    st.stop()
-
-# Créer ou ouvrir l'index Whoosh
-ix = create_whoosh_index(data)
-
-# --- Interface principale avec onglets ---
-tab1, tab2, tab3, tab4 = st.tabs(["🔍 Recherche", "📊 Visualisation", "⚙️ Mise à jour", "ℹ️ Informations"])
-
-with tab1:
-    st.markdown("<h2 class='sub-header'>Recherche d'instructions</h2>", unsafe_allow_html=True)
-    
-    col1, col2 = st.columns([3, 1])
-    
-    with col1:
-        st.markdown("<div class='card'>", unsafe_allow_html=True)
-        search_query = st.text_input("🔍 Recherche avancée", placeholder="Entrez des mots-clés (ex: hygiène, restauration, contamination...)")
-        st.markdown("</div>", unsafe_allow_html=True)
-    
-    with col2:
-        st.markdown("<div class='card'>", unsafe_allow_html=True)
-        search_button = st.button("🔎 Rechercher", use_container_width=True)
-        st.markdown("</div>", unsafe_allow_html=True)
-    
-    # Filtres supplémentaires
-    with st.expander("Filtres avancés"):
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            years = sorted(data['year'].unique(), reverse=True)
-            selected_year = st.selectbox("Année", ["Toutes"] + list(years))
-            
-        with col2:
-            if selected_year != "Toutes":
-                weeks = sorted(data[data['year'] == selected_year]['week'].unique())
-                selected_week = st.selectbox("Semaine", ["Toutes"] + list(weeks))
-            else:
-                selected_week = "Toutes"
-    
-    # Effectuer la recherche
-    if search_button or search_query or (selected_year != "Toutes"):
-        with st.spinner("Recherche en cours..."):
-            # Appliquer les filtres par année/semaine
-            filtered_data = data.copy()
-            
-            if selected_year != "Toutes":
-                filtered_data = filtered_data[filtered_data['year'] == selected_year]
-                
-                if selected_week != "Toutes":
-                    filtered_data = filtered_data[filtered_data['week'] == selected_week]
-            
-            # Si recherche textuelle, appliquer la recherche avancée
-            if search_query:
-                search_results = search_instructions(search_query, ix, filtered_data)
-                st.session_state.search_results = search_results
-            else:
-                st.session_state.search_results = filtered_data
-    
-    # Afficher les résultats de recherche
-    if 'search_results' in st.session_state and st.session_state.search_results is not None:
-        results = st.session_state.search_results
-        
-        if results.empty:
-            st.markdown("<div class='info-box'>Aucun résultat trouvé pour cette recherche.</div>", unsafe_allow_html=True)
-        else:
-            st.markdown(f"<div class='success-message'>📊 {len(results)} instructions trouvées</div>", unsafe_allow_html=True)
-            
-            # Formater les données pour l'affichage
-            display_data = format_data_for_display(results)
-            
-            # Affichage des résultats sous forme de tableau
-            st.markdown("<div class='card'>", unsafe_allow_html=True)
-            st.dataframe(
-                display_data[['affichage_date', 'title', 'objet_court']],
-                column_config={
-                    "affichage_date": "Date",
-                    "title": "Titre",
-                    "objet_court": "Objet"
-                },
-                use_container_width=True,
-                hide_index=True
-            )
-            st.markdown("</div>", unsafe_allow_html=True)
-    else:
-        # Afficher toutes les données par défaut si aucune recherche n'a été effectuée
-        display_data = format_data_for_display(data)
-        st.markdown("<div class='card'>", unsafe_allow_html=True)
-        st.dataframe(
-            display_data[['affichage_date', 'title', 'objet_court']],
-            column_config={
-                "affichage_date": "Date",
-                "title": "Titre",
-                "objet_court": "Objet"
-            },
-            use_container_width=True,
-            hide_index=True
-        )
-        st.markdown("</div>", unsafe_allow_html=True)
-            
-    # Sélection d'une instruction pour voir les détails
-    if 'search_results' in st.session_state and st.session_state.search_results is not None and not st.session_state.search_results.empty:
-        results = st.session_state.search_results
-        st.markdown("<h3 class='sub-header'>Détails de l'instruction</h3>", unsafe_allow_html=True)
-        selected_title = st.selectbox("Sélectionner une instruction", options=results['title'].tolist())
-        
-        if selected_title:
-            st.session_state.selected_instruction = selected_title
-            instruction = results[results['title'] == selected_title].iloc[0]
-            
-            # Affichage détaillé de l'instruction
-            st.markdown("<div class='card'>", unsafe_allow_html=True)
-            
-            col1, col2 = st.columns([2, 1])
-            
-            with col1:
-                st.markdown(f"<h3>{instruction['title']}</h3>", unsafe_allow_html=True)
-                st.markdown(f"<p><strong>Année:</strong> {instruction['year']} | <strong>Semaine:</strong> {instruction['week']}</p>", unsafe_allow_html=True)
-                
-            with col2:
-                st.markdown(f"<p><a href='{instruction['link']}' target='_blank'>🔗 Voir sur le site</a></p>", unsafe_allow_html=True)
-                st.markdown(f"<p><a href='{instruction['pdf_link']}' target='_blank'>📄 Télécharger le PDF</a></p>", unsafe_allow_html=True)
-            
-            st.markdown("<hr>", unsafe_allow_html=True)
-            st.markdown(f"<p><strong>Objet:</strong> {instruction['objet']}</p>", unsafe_allow_html=True)
-            st.markdown(f"<p><strong>Résumé:</strong> {instruction['resume']}</p>", unsafe_allow_html=True)
-            
-            st.markdown("</div>", unsafe_allow_html=True)
-            
-            # Bouton pour télécharger cette instruction
-            if st.download_button(
-                "📥 Télécharger cette instruction (CSV)",
-                data=results[results['title'] == selected_title].to_csv(index=False).encode('utf-8'),
-                file_name=f"instruction_{instruction['year']}_{instruction['week']}.csv",
-                mime="text/csv"
-            ):
-                st.success("✅ Instruction téléchargée!")
-
-with tab2:
-    st.markdown("<h2 class='sub-header'>Visualisation des données</h2>", unsafe_allow_html=True)
-    
-    # Statistiques générales
-    st.markdown("<div class='card'>", unsafe_allow_html=True)
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.metric("Total Instructions", len(data))
-    
-    with col2:
-        st.metric("Années couvertes", f"{min(data['year'])} - {max(data['year'])}")
-    
-    with col3:
-        # Correction de l'erreur à la ligne 851
-        if 'last_updated' in data.columns and not data['last_updated'].isna().all():
-            try:
-                last_update = max(pd.to_datetime(data['last_updated'], errors='coerce').dropna())
-                last_update_str = last_update.strftime("%d/%m/%Y")
-            except (ValueError, TypeError):
-                last_update_str = "Non disponible"
-        else:
-            last_update_str = "Non disponible"
-            
-        st.metric("Dernière mise à jour", last_update_str)
-    
-    st.markdown("</div>", unsafe_allow_html=True)
-    
-    # Graphique par année
-    st.markdown("<h3 class='sub-header'>Répartition par année</h3>", unsafe_allow_html=True)
-    
-    year_counts = data.groupby('year').size().reset_index(name='count')
-    
-    st.markdown("<div class='card'>", unsafe_allow_html=True)
-    st.bar_chart(year_counts, x='year', y='count')
-    st.markdown("</div>", unsafe_allow_html=True)
-    
-    # Répartition par mois
-    st.markdown("<h3 class='sub-header'>Répartition par semaine</h3>", unsafe_allow_html=True)
-    
-    week_counts = data.groupby('week').size().reset_index(name='count')
-    
-    st.markdown("<div class='card'>", unsafe_allow_html=True)
-    st.line_chart(week_counts, x='week', y='count')
-    st.markdown("</div>", unsafe_allow_html=True)
-
-with tab3:
-    st.markdown("<h2 class='sub-header'>Mise à jour des données</h2>", unsafe_allow_html=True)
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("<div class='card'>", unsafe_allow_html=True)
-        st.markdown("<h3>Mise à jour automatique</h3>", unsafe_allow_html=True)
-        
-        update_freq = st.selectbox(
-            "Fréquence de mise à jour automatique",
-            options=["Désactivée", "Quotidienne", "Hebdomadaire", "Mensuelle"],
-            index=2  # Par défaut: Hebdomadaire
-        )
-        
-        st.session_state.update_frequency = update_freq
-        
-        if update_freq != "Désactivée":
-            st.info(f"🔄 Les mises à jour automatiques sont configurées: {update_freq}")
-            
-            if st.button("🔄 Vérifier maintenant"):
-                download_db_from_github()
-        else:
-            st.warning("⚠️ Les mises à jour automatiques sont désactivées")
-        
-        st.markdown("</div>", unsafe_allow_html=True)
-    
-    with col2:
-        st.markdown("<div class='card'>", unsafe_allow_html=True)
-        st.markdown("<h3>Mise à jour manuelle</h3>", unsafe_allow_html=True)
-        
-        st.write("Téléchargez manuellement la dernière version ou mettez à jour avec de nouvelles instructions.")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            if st.button("📥 Télécharger depuis GitHub", use_container_width=True):
-                download_db_from_github(force=True)
-        
-        with col2:
-            if st.button("🔎 Rechercher nouvelles instructions", use_container_width=True):
-                update_database(weeks_limit=20)
-        
-        st.markdown("</div>", unsafe_allow_html=True)
-    
-    # Exporter les données
-    st.markdown("<div class='card'>", unsafe_allow_html=True)
-    st.markdown("<h3>Exporter les données</h3>", unsafe_allow_html=True)
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        if st.download_button(
-            "📥 Télécharger toutes les données (CSV)",
-            data=data.to_csv(index=False).encode('utf-8'),
-            file_name="sdssa_instructions_complete.csv",
-            mime="text/csv",
-            use_container_width=True
-        ):
-            st.success("✅ Données téléchargées!")
-    
-    with col2:
-        # Exporter uniquement les instructions récentes
-        recent_date = datetime.now() - timedelta(days=90)
-        recent_data = data[pd.to_datetime(data['last_updated']) > recent_date]
-        
-        if not recent_data.empty:
-            if st.download_button(
-                f"📥 Instructions récentes ({len(recent_data)})",
-                data=recent_data.to_csv(index=False).encode('utf-8'),
-                file_name="sdssa_instructions_recent.csv",
-                mime="text/csv",
-                use_container_width=True
-            ):
-                st.success("✅ Données récentes téléchargées!")
-    
-    st.markdown("</div>", unsafe_allow_html=True)
-    
-    # Gestion des sauvegardes
-    st.markdown("<div class='card'>", unsafe_allow_html=True)
-    st.markdown("<h3>Gestion des sauvegardes</h3>", unsafe_allow_html=True)
-    
-    backups = sorted(glob.glob("backups/sdssa_instructions_*.db"), reverse=True)
-    
-    if backups:
-        st.write(f"📁 {len(backups)} sauvegardes disponibles:")
-        
-        for backup in backups:
-            backup_name = os.path.basename(backup)
-            backup_date = backup_name.replace("sdssa_instructions_", "").replace(".db", "")
-            
-            try:
-                formatted_date = datetime.strptime(backup_date, "%Y%m%d_%H%M%S").strftime("%d/%m/%Y à %H:%M:%S")
-            except:
-                formatted_date = backup_date
-            
-            col1, col2 = st.columns([3, 1])
-            
-            with col1:
-                st.write(f"📂 Sauvegarde du {formatted_date}")
-            
-            with col2:
-                if st.button(f"🔄 Restaurer", key=f"restore_{backup_name}"):
-                    try:
-                        # Sauvegarder la base actuelle avant restauration
-                        if os.path.exists("data/sdssa_instructions.db"):
-                            current_backup = f"backups/pre_restore_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
-                            shutil.copy2("data/sdssa_instructions.db", current_backup)
-                        
-                        # Restaurer la sauvegarde
-                        shutil.copy2(backup, "data/sdssa_instructions.db")
-                        st.success(f"✅ Base de données restaurée depuis la sauvegarde du {formatted_date}")
-                        
-                        # Recharger les données
-                        st.cache_data.clear()
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"❌ Erreur lors de la restauration: {e}")
-    else:
-        st.info("📌 Aucune sauvegarde disponible")
-    
-    st.markdown("</div>", unsafe_allow_html=True)
-
-with tab4:
-    st.markdown("<h2 class='sub-header'>À propos de l'application</h2>", unsafe_allow_html=True)
-    
-    st.markdown("<div class='card'>", unsafe_allow_html=True)
-    st.markdown("""
-    <h3>Instructions Techniques DGAL / SDSSA</h3>
-    <p>Cette application permet de consulter, rechercher et gérer les instructions techniques 
-    de la Direction Générale de l'Alimentation (DGAL) / Service de la Sécurité Sanitaire des Aliments (SDSSA).</p>
-    
-    <h4>Fonctionnalités:</h4>
-    <ul>
-        <li>Recherche avancée avec prise en compte des synonymes</li>
-        <li>Filtrage par année et semaine</li>
-        <li>Visualisation des données</li>
-        <li>Téléchargement automatique depuis GitHub</li>
-        <li>Mise à jour automatique configurables</li>
-        <li>Système de sauvegarde et restauration</li>
-    </ul>
-    
-    <h4>Utilisation:</h4>
-    <ol>
-        <li>Utilisez l'onglet <strong>Recherche</strong> pour trouver des instructions spécifiques</li>
-        <li>Consultez l'onglet <strong>Visualisation</strong> pour voir des statistiques sur les données</li>
-        <li>Dans l'onglet <strong>Mise à jour</strong>, configurez la fréquence de mise à jour automatique</li>
-        <li>Les détails des instructions affichent l'objet, le résumé et des liens vers les documents originaux</li>
-    </ol>
-    """, unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
-    
-    # Informations techniques
-    st.markdown("<div class='card'>", unsafe_allow_html=True)
-    st.markdown("<h3>Informations techniques</h3>", unsafe_allow_html=True)
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("""
-        <h4>Technologies utilisées:</h4>
-        <ul>
-            <li>Streamlit</li>
-            <li>SQLite</li>
-            <li>Whoosh (moteur de recherche)</li>
-            <li>BeautifulSoup (web scraping)</li>
-            <li>NLTK (traitement du langage naturel)</li>
-        </ul>
-        """, unsafe_allow_html=True)
-    
-    with col2:
-        st.markdown("""
-        <h4>Structure des données:</h4>
-        <ul>
-            <li>Base de données SQLite</li>
-            <li>Index de recherche Whoosh</li>
-            <li>Sauvegardes automatiques</li>
-            <li>Synchronisation avec GitHub</li>
-        </ul>
-        """, unsafe_allow_html=True)
-    
-    st.markdown("</div>", unsafe_allow_html=True)
-    
-    # Source des données
-    st.markdown("<div class='card'>", unsafe_allow_html=True)
-    st.markdown("<h3>Source des données</h3>", unsafe_allow_html=True)
-    st.markdown("""
-    <p>Les données sont extraites du Bulletin Officiel du Ministère de l'Agriculture:</p>
-    <a href="https://info.agriculture.gouv.fr/boagri/" target="_blank">https://info.agriculture.gouv.fr/boagri/</a>
-    
-    <p style="margin-top: 15px;">Dépôt GitHub contenant la base de données:</p>
-    <a href="https://github.com/M00N69/sdssa-instructions-app" target="_blank">https://github.com/M00N69/sdssa-instructions-app</a>
-    """, unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
-
-# --- Pied de page ---
-st.markdown("<div class='footer'>", unsafe_allow_html=True)
-st.markdown("""
-<p>Application SDSSA Instructions - Développée avec Streamlit</p>
-<p>Dernière mise à jour: Mars 2025</p>
-""", unsafe_allow_html=True)
-
-# Logo/Branding dans le footer
-st.markdown("""
-<div style="text-align: center; margin-top: 20px;">
-    <a href="https://www.visipilot.com" target="_blank">
-        <img src="https://github.com/M00N69/sdssa-instructions-app/blob/main/app/assets/logo.png?raw=true" alt="Visipilot Logo" style="width: 200px;">
-    </a>
-</div>
-""", unsafe_allow_html=True)
-st.markdown("</div>", unsafe_allow_html=True)
-
-# --- Point d'entrée principal ---
-if __name__ == "__main__":
-    # Vérifier si c'est la première exécution
-    if 'first_run' not in st.session_state:
-        st.session_state.first_run = True
-        
-        # Si la base de données existe mais n'a pas été vérifiée récemment
-        if os.path.exists("data/sdssa_instructions.db") and (
-            st.session_state.db_last_checked is None or
-            (datetime.now() - st.session_state.db_last_checked).days > 1
-        ):
-            # Vérifier automatiquement les mises à jour au démarrage
-            download_db_from_github()
