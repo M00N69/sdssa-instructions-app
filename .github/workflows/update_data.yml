@@ -2,16 +2,16 @@ name: Update Data
 on:
   schedule:
     - cron: "0 8 * * 1"  # Exécuter tous les lundis à 8h00 UTC
-  workflow_dispatch:  # Permet le déclenchement manuel du workflow
+  workflow_dispatch:  # Permettre le déclenchement manuel
 
 jobs:
   update:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Explicitement demander les permissions d'écriture
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
-        with:
-          fetch-depth: 0  # Récupérer tout l'historique pour les modifications
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -21,55 +21,25 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then
-            pip install -r requirements.txt
-          else
-            echo "⚠️ Le fichier requirements.txt n'existe pas"
-            pip install requests beautifulsoup4 pandas nltk whoosh streamlit
-          fi
+          pip install requests beautifulsoup4 pandas
 
-      - name: Verify script existence
-        run: |
-          if [ -f scripts/update_script.py ]; then
-            echo "✅ Le script update_script.py existe"
-          else
-            echo "❌ Le script update_script.py n'existe pas"
-            ls -la scripts/
-            exit 1
-          fi
+      - name: Create directories
+        run: mkdir -p data
 
       - name: Run update script
-        run: |
-          mkdir -p logs
-          python scripts/update_script.py 2>&1 | tee logs/update.log
-        continue-on-error: true  # Continue même si le script échoue
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Check for errors in log
-        run: |
-          if grep -i "error\|exception\|traceback" logs/update.log; then
-            echo "⚠️ Des erreurs ont été détectées dans le log"
-            cat logs/update.log
-          else
-            echo "✅ Aucune erreur détectée dans le log"
-          fi
-
+        run: python scripts/update_script.py
+        
       - name: Check for changes
-        id: check_changes
+        id: git-check
         run: |
-          git status -s
-          if [[ -n $(git status -s) ]]; then
-            echo "changes=true" >> $GITHUB_OUTPUT
-          else
-            echo "changes=false" >> $GITHUB_OUTPUT
-          fi
+          git status --porcelain
+          echo "::set-output name=modified::$(if git status --porcelain | grep .; then echo true; else echo false; fi)"
 
-      - name: Commit and push if changes
-        if: steps.check_changes.outputs.changes == 'true'
+      - name: Commit and push if changed
+        if: steps.git-check.outputs.modified == 'true'
         run: |
-          git config --global user.name "github-actions"
-          git config --global user.email "github-actions@github.com"
-          git add .
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          git add -A
           git commit -m "Auto-update data $(date +'%Y-%m-%d')"
           git push
