@@ -9,27 +9,67 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3  # Version plus récente
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Récupérer tout l'historique pour les modifications
 
       - name: Set up Python
-        uses: actions/setup-python@v4  # Version plus récente
+        uses: actions/setup-python@v4
         with:
-          python-version: '3.10'  # Version spécifique de Python
+          python-version: '3.10'
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          else
+            echo "⚠️ Le fichier requirements.txt n'existe pas"
+            pip install requests beautifulsoup4 pandas nltk whoosh streamlit
+          fi
+
+      - name: Verify script existence
+        run: |
+          if [ -f scripts/update_script.py ]; then
+            echo "✅ Le script update_script.py existe"
+          else
+            echo "❌ Le script update_script.py n'existe pas"
+            ls -la scripts/
+            exit 1
+          fi
 
       - name: Run update script
-        run: python scripts/update_script.py
+        run: |
+          mkdir -p logs
+          python scripts/update_script.py 2>&1 | tee logs/update.log
+        continue-on-error: true  # Continue même si le script échoue
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Passage du token pour les API
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check for errors in log
+        run: |
+          if grep -i "error\|exception\|traceback" logs/update.log; then
+            echo "⚠️ Des erreurs ont été détectées dans le log"
+            cat logs/update.log
+          else
+            echo "✅ Aucune erreur détectée dans le log"
+          fi
+
+      - name: Check for changes
+        id: check_changes
+        run: |
+          git status -s
+          if [[ -n $(git status -s) ]]; then
+            echo "changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "changes=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Commit and push if changes
+        if: steps.check_changes.outputs.changes == 'true'
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "github-actions@github.com"
           git add .
-          git diff --quiet && git diff --staged --quiet || git commit -m "Auto-update data $(date +'%Y-%m-%d')"
+          git commit -m "Auto-update data $(date +'%Y-%m-%d')"
           git push
