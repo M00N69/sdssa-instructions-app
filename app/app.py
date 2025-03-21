@@ -1141,3 +1141,4 @@ if __name__ == "__main__":
         ):
             # Vérifier automatiquement les mises à jour au démarrage
             download_db_from_github()
+            
