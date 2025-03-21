@@ -274,7 +274,7 @@ def push_db_to_github():
                 st.error(response.text)
                 status.update(label="❌ Échec de la mise à jour", state="error")
                 return False
-                
+        
         except Exception as e:
             st.error(f"❌ Exception lors de la mise à jour sur GitHub: {str(e)}")
             st.error(traceback.format_exc())
