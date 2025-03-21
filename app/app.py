@@ -199,7 +199,87 @@ def push_db_to_github():
                 st.error("❌ Impossible de trouver la base de données locale à mettre à jour.")
                 status.update(label="❌ Échec de la mise à jour", state="error")
                 return False
-
+            
+            # Récupérer le token GitHub depuis les secrets Streamlit
+            try:
+                github_token = st.secrets["GITHUB_TOKEN"]
+                if not github_token:
+                    st.error("❌ Token GitHub vide. Veuillez configurer le secret GITHUB_TOKEN dans Streamlit Cloud.")
+                    status.update(label="❌ Échec de la mise à jour", state="error")
+                    return False
+            except Exception as e:
+                st.error("❌ Token GitHub manquant. Veuillez configurer le secret GITHUB_TOKEN dans Streamlit Cloud.")
+                status.update(label="❌ Échec de la mise à jour", state="error")
+                return False
+            
+            # Informations du dépôt
+            owner = "M00N69"
+            repo = "sdssa-instructions-app"
+            path = "data/sdssa_instructions.db"
+            branch = "main"  # ou 'master' selon votre configuration
+            
+            # Préparation des en-têtes pour l'API GitHub
+            headers = {
+                "Authorization": f"token {github_token}",
+                "Accept": "application/vnd.github.v3+json"
+            }
+            
+            st.write("🔍 Vérification du fichier sur GitHub...")
+            
+            # 1. Vérifier si le fichier existe déjà sur GitHub pour obtenir son SHA
+            url_get_file = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}?ref={branch}"
+            response = requests.get(url_get_file, headers=headers)
+            
+            file_sha = None
+            if response.status_code == 200:
+                file_sha = response.json().get("sha")
+                st.write("✅ Fichier existant trouvé sur GitHub")
+            elif response.status_code == 404:
+                st.write("ℹ️ Première mise à jour du fichier sur GitHub")
+            else:
+                st.error(f"❌ Erreur lors de la vérification du fichier sur GitHub: {response.status_code}")
+                st.error(response.text)
+                status.update(label="❌ Échec de la mise à jour", state="error")
+                return False
+            
+            # 2. Lire et encoder le contenu du fichier local
+            with open(local_db_path, "rb") as file:
+                file_content = file.read()
+                file_content_base64 = base64.b64encode(file_content).decode("utf-8")
+            
+            st.write("📤 Préparation de la mise à jour...")
+            
+            # 3. Préparer les données pour la requête
+            data = {
+                "message": f"Mise à jour de la base de données - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+                "content": file_content_base64,
+                "branch": branch
+            }
+            
+            # Ajouter le SHA si le fichier existe déjà
+            if file_sha:
+                data["sha"] = file_sha
+            
+            # 4. Envoyer la mise à jour à GitHub
+            st.write("📤 Envoi de la mise à jour vers GitHub...")
+            url_update = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}"
+            response = requests.put(url_update, headers=headers, json=data)
+            
+            if response.status_code in [200, 201]:
+                st.success("✅ Base de données mise à jour avec succès sur GitHub!")
+                status.update(label="✅ Mise à jour réussie!", state="complete")
+                return True
+            else:
+                st.error(f"❌ Erreur lors de la mise à jour sur GitHub: {response.status_code}")
+                st.error(response.text)
+                status.update(label="❌ Échec de la mise à jour", state="error")
+                return False
+                
+        except Exception as e:
+            st.error(f"❌ Exception lors de la mise à jour sur GitHub: {str(e)}")
+            st.error(traceback.format_exc())
+            status.update(label="❌ Échec de la mise à jour", state="error")
+            return False
 # --- Vérification programmée des mises à jour ---
 def check_scheduled_updates():
     """Vérifie s'il est temps de faire une mise à jour programmée."""
