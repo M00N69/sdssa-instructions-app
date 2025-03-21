@@ -23,7 +23,6 @@ from PIL import Image
 from io import BytesIO
 import base64  # Ajout de l'import pour encodage base64
 
-
 # Configuration de la page Streamlit avec plus d'options
 st.set_page_config(
     page_title="SDSSA Instructions - Visualisation et Recherche",
@@ -185,14 +184,12 @@ def initialize_nltk():
         nltk.download("wordnet")
         nltk.download("omw-1.4")
 
-
 initialize_nltk()
 
 # --- Configuration des répertoires ---
 os.makedirs("data", exist_ok=True)
 os.makedirs("indexdir", exist_ok=True)
 os.makedirs("backups", exist_ok=True)
-
 
 # --- Fonction pour télécharger la base de données depuis GitHub ---
 def download_db_from_github(force=False):
@@ -271,7 +268,6 @@ def download_db_from_github(force=False):
         st.error(traceback.format_exc())
         return False
 
-
 # --- Fonctions de gestion de la base de données SQLite ---
 def get_db_connection():
     """Crée et retourne une connexion à la base de données avec un context manager."""
@@ -284,7 +280,6 @@ def get_db_connection():
 
     return sqlite3.connect(db_path)
 
-
 def ensure_database_structure():
     """Vérifie et crée la structure de la base de données."""
     with get_db_connection() as conn:
@@ -292,17 +287,17 @@ def ensure_database_structure():
         try:
             cursor.execute(
                 """
-                    CREATE TABLE IF NOT EXISTS instructions (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        year INTEGER,
-                        week INTEGER,
-                        title TEXT UNIQUE,
-                        link TEXT,
-                        pdf_link TEXT,
-                        objet TEXT,
-                        resume TEXT,
-                        last_updated TIMESTAMP
-                    )
+                CREATE TABLE IF NOT EXISTS instructions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    year INTEGER,
+                    week INTEGER,
+                    title TEXT UNIQUE,
+                    link TEXT,
+                    pdf_link TEXT,
+                    objet TEXT,
+                    resume TEXT,
+                    last_updated TIMESTAMP
+                )
                 """
             )
             conn.commit()
@@ -319,6 +314,48 @@ def ensure_database_structure():
             st.error(f"❌ Erreur base de données: {e}")
             return False
 
+def check_table_structure():
+    """Vérifie la structure actuelle de la table instructions."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA table_info(instructions)")
+        columns = cursor.fetchall()
+        for column in columns:
+            print(column)
+
+def add_id_column_if_missing():
+    """Ajoute la colonne 'id' si elle est manquante."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute("ALTER TABLE instructions ADD COLUMN id INTEGER PRIMARY KEY AUTOINCREMENT")
+            conn.commit()
+            print("Colonne 'id' ajoutée avec succès.")
+        except sqlite3.OperationalError as e:
+            print(f"Erreur lors de l'ajout de la colonne 'id': {e}")
+
+def recreate_table():
+    """Recrée la table instructions avec la structure correcte."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DROP TABLE IF EXISTS instructions")
+        cursor.execute(
+            """
+            CREATE TABLE instructions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                year INTEGER,
+                week INTEGER,
+                title TEXT UNIQUE,
+                link TEXT,
+                pdf_link TEXT,
+                objet TEXT,
+                resume TEXT,
+                last_updated TIMESTAMP
+            )
+            """
+        )
+        conn.commit()
+        print("Table 'instructions' recréée avec succès.")
 
 def load_data():
     """Charge les données depuis la base de données avec mise en cache."""
@@ -337,7 +374,6 @@ def load_data():
         st.error(f"❌ Erreur lors du chargement des données: {e}")
         return pd.DataFrame()
 
-
 def get_instruction_details(title):
     """Récupère les détails d'une instruction spécifique."""
     with get_db_connection() as conn:
@@ -346,7 +382,6 @@ def get_instruction_details(title):
         if not df.empty:
             return df.iloc[0]
         return None
-
 
 def add_instruction_to_db(year, week, title, link, pdf_link, objet, resume):
     """Ajoute ou met à jour une instruction dans la base de données."""
@@ -365,7 +400,6 @@ def add_instruction_to_db(year, week, title, link, pdf_link, objet, resume):
         except sqlite3.Error as e:
             st.error(f"❌ Erreur DB insertion/mise à jour: {e}")
             return False
-
 
 # --- Fonctions de Web Scraping ---
 def get_new_instructions(year, week):
@@ -436,7 +470,6 @@ def get_new_instructions(year, week):
         st.error(f"❌ Erreur connexion année {year} semaine {week}: {e}")
         return []
 
-
 # --- Fonctions de Normalisation de Texte et Indexation Whoosh ---
 @st.cache_resource
 def create_whoosh_index(df):
@@ -478,7 +511,6 @@ def create_whoosh_index(df):
         st.stop()
         return None
 
-
 def update_whoosh_index(df):
     """Met à jour l'index Whoosh avec les nouvelles données."""
     index_dir = "indexdir"
@@ -490,7 +522,6 @@ def update_whoosh_index(df):
     # Recréer l'index
     create_whoosh_index(df)
 
-
 def get_synonyms(word):
     """Récupère les synonymes d'un mot."""
     synonyms = set()
@@ -499,14 +530,12 @@ def get_synonyms(word):
             synonyms.add(lemma.name().lower())
     return synonyms
 
-
 def normalize_text(text):
     """Normalise le texte."""
     lemmatizer = WordNetLemmatizer()
     words = word_tokenize(text.lower())
     normalized_words = [lemmatizer.lemmatize(word) for word in words]
     return " ".join(normalized_words)
-
 
 # --- Fonction de recherche avancée ---
 def search_instructions(query, ix, data):
@@ -600,7 +629,6 @@ def search_instructions(query, ix, data):
         st.error(f"❌ Erreur lors de la recherche: {e}")
         st.error(traceback.format_exc())
         return pd.DataFrame(columns=data.columns)
-
 
 # --- Fonction pour mettre à jour les données ---
 def update_database(weeks_limit=10):
@@ -702,7 +730,6 @@ def update_database(weeks_limit=10):
             st.error(f"❌ Erreur inattendue: {e}")
             st.error(traceback.format_exc())
             return False
-
 
 # --- Interface utilisateur Streamlit ---
 def main():
@@ -899,7 +926,5 @@ def main():
         unsafe_allow_html=True,
     )
 
-
 if __name__ == "__main__":
     main()
-
