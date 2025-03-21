@@ -40,7 +40,7 @@ def setup_database():
     conn.commit()
     conn.close()
 
-# 📌 Fonction pour corriger les liens mal formatés
+# 📌 Fonction pour corriger les liens mal formés
 def fix_links():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
@@ -145,4 +145,3 @@ if __name__ == "__main__":
     update_database()
 
     print("✅ Mise à jour terminée !")
-
