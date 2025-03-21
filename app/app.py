@@ -1035,17 +1035,17 @@ with tab3:
                     except Exception as e:
                         st.error(f"❌ Erreur lors de la restauration: {e}")
             
-    # Ajouter un bouton de téléchargement à côté du bouton de restauration
-    if st.download_button(
-        "📥 Télécharger",
-        data=open(backup, 'rb').read(),
-        file_name=f"sdssa_instructions_{backup_date}.db",
-        mime="application/octet-stream",
-        key=f"download_{backup_name}"
-    ):
-        st.success(f"✅ Sauvegarde du {formatted_date} téléchargée!")
-    else:
-        st.info("📌 Aucune sauvegarde disponible")
+                # Ajouter un bouton de téléchargement à côté du bouton de restauration
+                if st.download_button(
+                    "📥 Télécharger",
+                    data=open(backup, 'rb').read(),
+                    file_name=f"sdssa_instructions_{backup_date}.db",
+                    mime="application/octet-stream",
+                    key=f"download_{backup_name}"
+                ):
+                    st.success(f"✅ Sauvegarde du {formatted_date} téléchargée!")
+                else:
+                    st.info("📌 Aucune sauvegarde disponible")
 
     st.markdown("</div>", unsafe_allow_html=True)
 
